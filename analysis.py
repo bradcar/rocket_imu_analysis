@@ -4,6 +4,8 @@ Rocket trajectory post-flight analysis.
 
 Data flow: raw → truncated → filtered → bias-corrected → inertial.
 
+Cast input data to FP64, Numpy defaults to 64-bit.
+
 NAMING CONVENTION:
 Preliminary data procesing
     ax_t, ay_t, az_t   : truncated accel (flight window)
@@ -40,9 +42,10 @@ SOURCE Ideas:
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
+np.set_printoptions(precision=10)
 
 # --- CONSTANTS & UTILITIES ---
-GEARTH = 9.81
+G_EARTH = 9.81
 filename = "data/launch_data.txt"
 plot_directory = "plots"
 
@@ -53,7 +56,7 @@ def truncate(outvec, timevec, ts, te):
 
 def simple_firstorder_iir_filter(vec, tau):
     """Manual low-pass filter (for comparison purposes)."""
-    outvec = np.zeros_like(vec)
+    outvec = np.zeros_like(vec, dtype=np.float64)
     outvec[0] = vec[0]
     for x in range(1, len(vec)):
         outvec[x] = (1 - tau) * outvec[x - 1] + tau * vec[x]
@@ -85,7 +88,7 @@ def add_2d_plot_note(note_text, ax=None, x=0.65, y=0.10, fontsize=9, color='gree
     )
 
 # --- 1. DATA LOADING & ANALYSIS ---
-data = np.loadtxt(filename)
+data = np.loadtxt(filename).astype(np.float64)
 time = data[:, 0]
 ax_b, ay_b, az_b = data[:, 1], data[:, 2], data[:, 3]
 gr_b, gp_b, gy_b = data[:, 4], data[:, 5], data[:, 6]
@@ -96,7 +99,7 @@ dt_avg = np.mean(np.diff(time))
 sample_frequency = 1.0 / dt_avg
 
 print(f"File: {filename}")
-print(f"Sampling Data Freq: {sample_frequency:.2f} Hz")
+print(f"Sample Data Freq: {sample_frequency:.2f} Hz")
 print(f"Average time step: {dt_avg:.4f} seconds ({dt_avg*1000:.1f} msec)")
 
 # --- 2. Launch/Land DETECTION ---
@@ -114,7 +117,7 @@ else:
     tland = time[-1]
 
 plt.figure(figsize=(10,4))
-plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=0.5)
+plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=1.0)
 plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
 plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
 plt.title("Step 2: Launch and Impact Detection Check")
@@ -142,7 +145,7 @@ gr_t, gp_t, gy_t = [truncate(v, time, tlaunch - buffer, tland + buffer) for v in
 A_mag_t = truncate(A_mag, time, tlaunch - buffer, tland + buffer)
 
 plt.figure(figsize=(10,4))
-plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=0.5)
+plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=1.0)
 plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
 plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
 plt.title("Step 2: Hand-corrected Launch and Impact Detection Check")
@@ -165,7 +168,7 @@ ax_f, ay_f, az_f = [signal.sosfiltfilt(sos,v) for v in [ax_t, ay_t, az_t]]
 gr_f, gp_f, gy_f = [signal.sosfiltfilt(sos,v) for v in [gr_t, gp_t, gy_t]]
 
 plt.figure(figsize=(12,6))
-plt.scatter(time_t, ax_t, color="black", s=8, alpha=0.2, label="Raw Data")
+plt.scatter(time_t, ax_t, color="black", s=8, alpha=1.0, label="Raw Data")
 plt.plot(time_t, ax_iir, color="red", label="IIR (Lagged)")
 plt.plot(time_t, ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase)")
 plt.title("Step 3: Filter Phase-Lag Comparison")
@@ -175,7 +178,7 @@ add_2d_plot_note("IIR lags, only forward looking, use Butterworh filter", x=0.55
 plt.savefig(f"{plot_directory}/iir-buterworth-plot.pdf")
 plt.show()
 
-# --- 4. CG TRANSLATION & BIAS REMOVAL ---
+# --- 4. Sensor vs Center of Gravity TRANSLATION & BIAS REMOVAL ---
 rx, ry, rz = 0.0, 0.0, 0.0
 dt = dt_avg
 gr_dot, gp_dot, gy_dot = np.gradient(gr_f, dt), np.gradient(gp_f, dt), np.gradient(gy_f, dt)
@@ -199,7 +202,7 @@ plt.figure(figsize=(10,4))
 plt.plot(time_t, ax_f, label="Raw Filtered Ax", alpha=0.5)
 plt.plot(time_t, ax_final, label="Bias Corrected Ax", color="blue")
 plt.xlim(tlaunch-0.8, tlaunch+0.2)
-plt.title("Step 4: Static Bias Correction (Pre-Launch Window)")
+plt.title("Step 4: Static Bias Correction (Pre-Launch Window) Center Gravity & Bias Correction")
 plt.legend()
 plt.grid(True)
 add_2d_plot_note("orig IMU data should zero bias")
@@ -208,7 +211,7 @@ plt.show()
 
 # --- 5. ATTITUDE ESTIMATION ---
 num_pts = len(time_t)
-q = np.array([[1.0,0.0,0.0,0.0]]*num_pts)
+q = np.array([[1.0,0.0,0.0,0.0]]*num_pts, dtype=np.float64)
 twoKp = 1.0
 
 for i in range(num_pts-1):
@@ -231,7 +234,7 @@ for i in range(num_pts-1):
         q[i,0]*gr + q[i,2]*gy - q[i,3]*gp,
         q[i,0]*gp - q[i,1]*gy + q[i,3]*gr,
         q[i,0]*gy + q[i,1]*gp - q[i,2]*gr
-    ])
+    ], dtype=np.float64)
     q[i+1] = q[i] + dq*dt_step
     q[i+1] /= np.linalg.norm(q[i+1])
 
@@ -251,15 +254,15 @@ plt.savefig(f"{plot_directory}/roll-pitch-plot.pdf")
 plt.show()
 
 # --- 6. INERTIAL TRANSFORM ---
-ax_I, ay_I, az_I = np.zeros(num_pts), np.zeros(num_pts), np.zeros(num_pts)
+ax_I, ay_I, az_I = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64)
 for i in range(num_pts):
     cp, sp, ct, st, cs, ss = np.cos(roll[i]), np.sin(roll[i]), np.cos(pitch[i]), np.sin(pitch[i]), np.cos(yaw[i]), np.sin(yaw[i])
     TIB = np.array([
         [ct*cs, sp*st*cs - cp*ss, cp*st*cs + sp*ss],
         [ct*ss, sp*st*ss + cp*cs, cp*st*ss - sp*cs],
         [-st, sp*ct, cp*ct]
-    ])
-    ax_I[i], ay_I[i], az_I[i] = TIB @ np.array([ax_final[i], ay_final[i], az_final[i]])
+    ], dtype=np.float64)
+    ax_I[i], ay_I[i], az_I[i] = TIB @ np.array([ax_final[i], ay_final[i], az_final[i]], dtype=np.float64)
 
 if np.any(pre_launch_mask):
     ax_I -= np.mean(ax_I[pre_launch_mask])
@@ -279,8 +282,8 @@ plt.savefig(f"{plot_directory}/inertial-acceleration-plot.pdf")
 plt.show()
 
 # --- 7. INTEGRATION & DRIFT COMPENSATION ---
-vx, vy, vz = np.zeros(num_pts), np.zeros(num_pts), np.zeros(num_pts)
-px, py, pz = np.zeros(num_pts), np.zeros(num_pts), np.zeros(num_pts)
+vx, vy, vz = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64)
+px, py, pz = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64)
 
 for i in range(1,num_pts):
     dt_step = time_t[i]-time_t[i-1]
@@ -295,7 +298,7 @@ t_rel = time_t - time_t[0]
 total_t = time_t[-1] - time_t[0]
 vx_c, vy_c, vz_c = vx - (vx[-1]*(t_rel/total_t)), vy - (vy[-1]*(t_rel/total_t)), vz - (vz[-1]*(t_rel/total_t))
 
-px_f, py_f, pz_f = np.zeros(num_pts), np.zeros(num_pts), np.zeros(num_pts)
+px_f, py_f, pz_f = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64)
 for i in range(1,num_pts):
     dt_step = time_t[i]-time_t[i-1]
     if time_t[i]<tland:
