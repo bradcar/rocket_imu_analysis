@@ -6,7 +6,7 @@ from scipy import signal
 
 # --- CONSTANTS & UTILITIES ---
 GEARTH = 9.81
-filename = 'data/launch_data.txt'
+filename = "data/launch_data.txt"
 
 def truncate(outvec, timevec, ts, te):
     """Crops the vector to the specified time window using a boolean mask."""
@@ -14,7 +14,7 @@ def truncate(outvec, timevec, ts, te):
     return outvec[mask]
 
 
-def simple_firstorder_IIR_filter(vec, tau):
+def simple_firstorder_iir_filter(vec, tau):
     """Manual low-pass filter (for comparison purposes)."""
     outvec = np.zeros_like(vec)
     outvec[0] = vec[0]
@@ -38,7 +38,7 @@ print(f"File: {filename}")
 print(f"Sampling Freq: {sample_frequency:.2f} Hz")
 print(f"Average time step: {dt_avg:.4f} seconds ({dt_avg * 1000.:.1f} msec)")
 
-# --- 2. ENHANCED EVENT DETECTION ---
+# --- 2. Launch/Land  DETECTION ---
 # Find Launch: first time exceeding 3.5G
 launch_indices = np.where(A_mag > 35.0)[0]
 if len(launch_indices) == 0:
@@ -54,21 +54,25 @@ if np.any(post_launch_mask):
 else:
     tland = time[-1]
 
-print(f"Detected Launch: {tlaunch:.2f}s")
-print(f"Detected Impact: {tland:.2f}s")
-print(f"Flight Duration: {tland - tlaunch:.2f}s")
-
-# Plot Detection Check
+# Plot Launch/Impact Detection Check
 plt.figure(figsize=(10, 4))
-plt.plot(time, A_mag, label='Total Acceleration (A_mag)', color='gray', alpha=0.5)
-plt.axvline(tlaunch, color='g', linestyle='--', label='Detected Launch')
-plt.axvline(tland, color='r', linestyle='--', label='Detected Impact')
-plt.title('Step 1: Launch and Impact Detection Check')
-plt.ylabel('m/s^2')
+plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=0.5)
+plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
+plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
+plt.title("Step 2: Launch and Impact Detection Check")
+plt.ylabel("m/s^2")
 plt.legend()
-plt.xlim(tlaunch - 5, tland + 5)
+plt.xlim(tlaunch - 0.5, tland + 0.5)
 plt.grid(True)
 plt.show()
+
+# Todo better automation - below are hand-adjusted launch/land time
+tlaunch = 874.6
+tland = 882.9
+
+print(f"Detected Launch: {tlaunch:.2f}s")
+print(f"Detected Chute Deploy: {tland:.2f}s")
+print(f"Flight Duration: {tland - tlaunch:.2f}s")
 
 # Truncate data for flight window + buffer
 buffer = 1.0
@@ -77,23 +81,36 @@ Ax_t, Ay_t, Az_t = [truncate(v, time, tlaunch - buffer, tland + buffer) for v in
 gx_t, gy_t, gz_t = [truncate(v, time, tlaunch - buffer, tland + buffer) for v in [gx, gy, gz]]
 A_mag_t = truncate(A_mag, time, tlaunch - buffer, tland + buffer)
 
-# --- 3. FILTERING ---
-cutoff = sample_frequency / 4.0
-b, a = signal.butter(2, cutoff / (0.5 * sample_frequency), btype='low')
+# Plot Launch/Impact Detection Check
+plt.figure(figsize=(10, 4))
+plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=0.5)
+plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
+plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
+plt.title("Step 2: Hand-corrected Launch and Impact Detection Check")
+plt.ylabel("m/s^2")
+plt.legend()
+plt.xlim(tlaunch - 0.3, tland + 0.3)
+plt.grid(True)
+plt.show()
 
-# Calculate various filters for comparison plot
-Ax_iir = simple_firstorder_IIR_filter(Ax_t, 0.5)
-Ax_f = signal.filtfilt(b, a, Ax_t)
-Ay_f, Az_f = signal.filtfilt(b, a, Ay_t), signal.filtfilt(b, a, Az_t)
-gx_f, gy_f, gz_f = [signal.filtfilt(b, a, v) for v in [gx_t, gy_t, gz_t]]
+# --- 3. FILTERING ---
+
+# Calculate simple IIR filter for comparison plot
+Ax_iir = simple_firstorder_iir_filter(Ax_t, 0.5)
+
+# Calculate more accurate Butterfield filter for comparison plot
+cutoff = sample_frequency / 4.0
+sos = signal.butter(2, cutoff / (0.5 * sample_frequency), btype="lowpass", output="sos")
+Ax_f, Ay_f, Az_f = [signal.sosfiltfilt(sos, v) for v in [Ax_t, Ay_t, Az_t]]
+gx_f, gy_f, gz_f = [signal.sosfiltfilt(sos, v) for v in [gx_t, gy_t, gz_t]]
 
 # Plot Filter Comparison
 plt.figure(figsize=(12, 6))
-plt.scatter(time_t, Ax_t, color='black', s=8, alpha=0.2, label='Raw Data')
-plt.plot(time_t, Ax_iir, color='red', label='IIR (Lagged)')
-plt.plot(time_t, Ax_f, color='blue', linewidth=2, label='Butterworth (Zero Phase)')
-plt.title('Step 2: Filter Phase-Lag Comparison')
-plt.ylabel('m/s^2')
+plt.scatter(time_t, Ax_t, color="black", s=8, alpha=0.2, label="Raw Data")
+plt.plot(time_t, Ax_iir, color="red", label="IIR (Lagged)")
+plt.plot(time_t, Ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase)")
+plt.title("Step 3: Filter Phase-Lag Comparison")
+plt.ylabel("m/s^2")
 plt.legend()
 plt.show()
 
@@ -121,10 +138,10 @@ else:
 
 # Bias Comparison Plot
 plt.figure(figsize=(10, 4))
-plt.plot(time_t, Ax_f, label='Raw Filtered Ax', alpha=0.5)
-plt.plot(time_t, Ax_final, label='Bias Corrected Ax', color='blue')
+plt.plot(time_t, Ax_f, label="Raw Filtered Ax", alpha=0.5)
+plt.plot(time_t, Ax_final, label="Bias Corrected Ax", color="blue")
 plt.xlim(tlaunch - 0.8, tlaunch + 0.2)
-plt.title('Step 3: Static Bias Correction (Pre-Launch Window)')
+plt.title("Step 4: Static Bias Correction (Pre-Launch Window)")
 plt.legend()
 plt.grid(True)
 plt.show()
@@ -164,10 +181,10 @@ yaw = np.arctan2(2 * (q[:, 0] * q[:, 3] + q[:, 1] * q[:, 2]), 1 - 2 * (q[:, 2] *
 
 # Euler Angles Plot
 plt.figure(figsize=(10, 4))
-plt.plot(time_t, np.degrees(pitch), label='Pitch (Degrees)', color='orange')
-plt.plot(time_t, np.degrees(roll), label='Roll (Degrees)', alpha=0.5)
-plt.title('Step 4: Attitude Estimation (Euler Angles)')
-plt.ylabel('Degrees')
+plt.plot(time_t, np.degrees(pitch), label="Pitch (Degrees)", color="orange")
+plt.plot(time_t, np.degrees(roll), label="Roll (Degrees)", alpha=0.5)
+plt.title("Step 5: Attitude Estimation (Euler Angles)")
+plt.ylabel("Degrees")
 plt.legend()
 plt.grid(True)
 plt.show()
@@ -192,11 +209,11 @@ if np.any(pre_launch_mask):
 
 # Inertial Plot
 plt.figure(figsize=(10, 4))
-plt.plot(time_t, Ax_I, label='Ax_Inertial')
-plt.plot(time_t, Ay_I, label='Ay_Inertial')
-plt.plot(time_t, Az_I, label='Az_Inertial', linewidth=2)
-plt.title('Step 5: Inertial Acceleration (Gravity Subtracted)')
-plt.ylabel('m/s^2')
+plt.plot(time_t, Ax_I, label="Ax_Inertial")
+plt.plot(time_t, Ay_I, label="Ay_Inertial")
+plt.plot(time_t, Az_I, label="Az_Inertial", linewidth=2)
+plt.title("Step 6: Inertial Acceleration (Gravity Subtracted)")
+plt.ylabel("m/s^2")
 plt.legend()
 plt.grid(True)
 plt.show()
@@ -234,38 +251,56 @@ for i in range(1, num_pts):
 # Trajectory Plot
 plt.figure(figsize=(12, 8))
 plt.subplot(2, 1, 1)
-plt.plot(time_t, pz_f, color='blue', lw=2.5, label='Vertical Altitude (Z)')
-plt.fill_between(time_t, pz_f, color='blue', alpha=0.1)
-plt.axvline(tlaunch, color='g', linestyle='--')
-plt.axvline(tland, color='r', linestyle='--')
-plt.title('Step 6: Final Drift-Corrected Altitude')
-plt.ylabel('Meters (m)')
+plt.plot(time_t, pz_f, color="blue", lw=2.5, label="Vertical Altitude (Z)")
+plt.fill_between(time_t, pz_f, color="blue", alpha=0.1)
+plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
+plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
+plt.title("Final Step 8: Final Drift-Corrected Altitude")
+plt.ylabel("Meters (m)")
 plt.legend()
+plt.show()
 
 plt.subplot(2, 1, 2)
-plt.plot(time_t, np.sqrt(px_f ** 2 + py_f ** 2), label='Ground Distance (Horizontal)', color='purple')
-plt.xlabel('Time (s)')
-plt.ylabel('Meters (m)')
+plt.plot(time_t, np.sqrt(px_f ** 2 + py_f ** 2), label="Ground Distance (Horizontal)", color="purple")
+plt.title("Final Step 8: Ground Distance (Horizontal")
+plt.xlabel("Time (s)")
+plt.ylabel("Meters (m)")
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-# 3D Plot
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot(px_f, py_f, pz_f, label='Flight Path', color='darkorange', lw=2)
-ax.set_title('Step 7: 3D Flight Path')
-ax.set_xlabel('X (m)')
-ax.set_ylabel('Y (m)')
-ax.set_zlabel('Z (m)')
-plt.show()
-
 # Clipping Check
 plt.figure(figsize=(10, 4))
-plt.plot(time_t, Ax_t, alpha=0.3, label='Raw Ax')
-plt.plot(time_t, Ax_f, color='blue', label='Filtered Ax')
+plt.plot(time_t, Ax_t, alpha=0.3, label="Raw Ax")
+plt.plot(time_t, Ax_f, color="blue", label="Filtered Ax")
 plt.xlim(tlaunch - 0.5, tlaunch + 4.0)
-plt.title('Step 8: Sensor Health Check (Thrust Phase Clipping)')
-plt.ylabel('m/s^2')
+plt.title("Final Step 8: Sensor Health Check (Thrust Phase Clipping)")
+plt.ylabel("m/s^2")
 plt.legend()
+plt.show()
+
+# 3D Plot flight path
+# Equal X and Y axis scaling
+x_min, x_max = px_f.min(), px_f.max()
+y_min, y_max = py_f.min(), py_f.max()
+
+x_center = 0.5 * (x_max + x_min)
+y_center = 0.5 * (y_max + y_min)
+
+x_span = x_max - x_min
+y_span = y_max - y_min
+
+span = max(x_span, y_span)
+pad = 0.10 * span
+half = 0.5 * span + pad
+
+fig = plt.figure(figsize=(10, 8))
+ax3d = fig.add_subplot(111, projection="3d")
+ax3d.plot(px_f, py_f, pz_f, label="Flight Path", color="darkorange", lw=2)
+ax3d.set_title("Final Step 8: 3D Flight Path")
+ax3d.set_xlabel("X (m)")
+ax3d.set_ylabel("Y (m)")
+ax3d.set_zlabel("Z (m)")
+ax3d.set_xlim(x_center - half, x_center + half)
+ax3d.set_ylim(y_center - half, y_center + half)
 plt.show()
