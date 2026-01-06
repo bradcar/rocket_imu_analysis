@@ -91,7 +91,7 @@ def estimate_attitude_trapezoidal(
     time_t,
     ax, ay, az,
     gr, gp, gy,
-    twoKp=1.0
+    twokp=1.0
 ):
     """
     Attitude estimation using trapezoidal integration of quaternion kinematics.
@@ -130,9 +130,9 @@ def estimate_attitude_trapezoidal(
         ey = azi*vx - axi*vz
         ez = axi*vy - ayi*vx
 
-        gri += twoKp * ex
-        gpi += twoKp * ey
-        gyi += twoKp * ez
+        gri += twokp * ex
+        gpi += twokp * ey
+        gyi += twokp * ez
 
         dt = time_t[i+1] - time_t[i]
 
@@ -292,7 +292,7 @@ roll, pitch, yaw, q = estimate_attitude_trapezoidal(
     time_t,
     ax_final, ay_final, az_final,
     gr_final, gp_final, gy_final,
-    twoKp=1.0
+    twokp=1.0
 )
 
 plt.figure(figsize=(10,4))
