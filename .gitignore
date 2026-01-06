@@ -3,6 +3,20 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# PyCharm project-level files and directories
+.idea/
+*.iml
+
+# Virtual environment
+venv/
+env/
+
+# Distribution and packaging
+.cache/
+dist/
+build/
+*.egg-info/
+
 # C extensions
 *.so
 
