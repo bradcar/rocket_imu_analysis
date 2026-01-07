@@ -168,6 +168,59 @@ def estimate_attitude_trapezoidal(
 
     return roll, pitch, yaw, q
 
+"""
+
+##############################################################
+NOT DEBUGGED  - in Pandas data frames
+https://www.youtube.com/watch?v=V8R4CbAcWuU
+
+# POWER SPECTRAL DENSITY - 
+def get_psd(df,bin_width):
+  fs = len(df)/(df.index[-1]-df.index[0])
+  f, psd = signal.welch(df.to_numpy(), 
+                        fs=fs, 
+                        nperseg=fs/bin_width,
+                        window='hanning',
+                        axis=0
+                        )
+
+  df_psd = pd.DataFrame(psd,columns=df.columns)
+  df_psd.columns
+  df_psd['Frequency (Hz)'] = f
+  return df_psd.set_index('Frequency (Hz)')
+  
+def get_psd_plot(df_psd):
+  fig = fig_from_df(df_psd.iloc[1:])
+  fig.update_xaxes(type="log",title_text="Frequency (Hz)")
+  fig.update_yaxes(type="log",title_text="Acceleration (g^2/s)")
+  return fig
+  
+def rms_from_psd(df_psd):
+    d_f = df_psd.index[1] - df_psd.index[0]
+    df_rms = df_psd.copy()
+    df_rms = df_rms*d_f
+    df_rms = df_rms.cumsum()
+    return(df_rms**0.5)
+
+  
+psd = get_psd(df,1.0) # 1 Hz bins
+# psd is two column Hz bins and value
+fig = get_psd_plot(psd)
+fig.show()
+
+
+df_rms = rms_from_psd(psd)
+fig = fig_from_df(df_rms)
+fig.update_xaxes(type="log",title_text="Frequency (Hz)")
+fig.update_yaxes(title_text="Acceleration gRMS")
+fig.write_html('cum-rms.html',full_html=False,include_plotlyjs='cdn')
+df_rms.to_csv('cum-rms.csv')
+fig.show()
+
+
+##############################################################
+"""
+
 
 # --- 1. DATA LOADING & ANALYSIS ---
 data = np.loadtxt(filename).astype(np.float64)
