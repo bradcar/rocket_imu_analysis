@@ -37,8 +37,11 @@ Axis convention (right-handed):
 Body axes rotate with the body; inertial axes are fixed to Earth.
 
 SOURCE Ideas:
-# https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
+    https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
+    https://www.youtube.com/watch?v=mb1RNYKtWQE
 """
+from time import sleep
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
@@ -168,59 +171,66 @@ def estimate_attitude_trapezoidal(
 
     return roll, pitch, yaw, q
 
-"""
 
-##############################################################
-NOT DEBUGGED  - in Pandas data frames
-https://www.youtube.com/watch?v=V8R4CbAcWuU
+# POWER SPECTRAL DENSITY
+def get_psd(signal_vector, fs, nperseg=1024):
+    """
+    Power spectral density (PSD) calculation
 
-# POWER SPECTRAL DENSITY - 
-def get_psd(df,bin_width):
-  fs = len(df)/(df.index[-1]-df.index[0])
-  f, psd = signal.welch(df.to_numpy(), 
-                        fs=fs, 
-                        nperseg=fs/bin_width,
-                        window='hanning',
-                        axis=0
-                        )
+    Usage:
+        ax_freq, ax_psd = get_psd(ax_b, fs=sample_frequency, nperseg=1024)
+        plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input data)")
+        print(f"{len(ax_b)=}, {len(ax_psd)=}")
 
-  df_psd = pd.DataFrame(psd,columns=df.columns)
-  df_psd.columns
-  df_psd['Frequency (Hz)'] = f
-  return df_psd.set_index('Frequency (Hz)')
-  
-def get_psd_plot(df_psd):
-  fig = fig_from_df(df_psd.iloc[1:])
-  fig.update_xaxes(type="log",title_text="Frequency (Hz)")
-  fig.update_yaxes(type="log",title_text="Acceleration (g^2/s)")
-  return fig
-  
+    :param signal_vector: input
+    :param fs: sampling frequency
+    :param nperseg:  number of points for PSD
+    :return:
+    """
+    nperseg = min(nperseg, len(signal_vector))
+
+    f, psd = signal.welch(
+        signal_vector,
+        fs=fs,
+        nperseg=nperseg,
+        window="hann",
+        detrend="constant",
+        scaling="density"
+    )
+
+    return f, psd
+
+
+def plot_psd(f, psd, title="Power Spectral Density"):
+    plt.figure(figsize=(8, 4))
+    plt.loglog(f[1:], psd[1:])  # skip DC bin
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("PSD (m²/s⁴/Hz)")
+    plt.title(title)
+    plt.grid(True, which="both")
+    plt.tight_layout()
+    plt.show()
+
+
 def rms_from_psd(df_psd):
+    """
+    TODO: Convert from pandas df to numpy array
+    df_rms = rms_from_psd(psd)
+    fig = fig_from_df(df_rms)
+    fig.update_xaxes(type="log", title_text="Frequency (Hz)")
+    fig.update_yaxes(title_text="Acceleration gRMS")
+    fig.write_html('cum-rms.html', full_html=False, include_plotlyjs='cdn')
+    df_rms.to_csv('cum-rms.csv')
+    fig.show()
+    """
     d_f = df_psd.index[1] - df_psd.index[0]
     df_rms = df_psd.copy()
-    df_rms = df_rms*d_f
+    df_rms = df_rms * d_f
     df_rms = df_rms.cumsum()
-    return(df_rms**0.5)
-
-  
-psd = get_psd(df,1.0) # 1 Hz bins
-# psd is two column Hz bins and value
-fig = get_psd_plot(psd)
-fig.show()
-
-
-df_rms = rms_from_psd(psd)
-fig = fig_from_df(df_rms)
-fig.update_xaxes(type="log",title_text="Frequency (Hz)")
-fig.update_yaxes(title_text="Acceleration gRMS")
-fig.write_html('cum-rms.html',full_html=False,include_plotlyjs='cdn')
-df_rms.to_csv('cum-rms.csv')
-fig.show()
+    return df_rms ** 0.5
 
 
 ##############################################################
-"""
-
 
 # --- 1. DATA LOADING & ANALYSIS ---
 data = np.loadtxt(filename).astype(np.float64)
@@ -312,6 +322,16 @@ plt.legend()
 add_2d_plot_note("IIR lags, only forward looking, use Butterworh filter", x=0.55)
 plt.savefig(f"{plot_directory}/iir-butterworth-plot.pdf")
 plt.show()
+
+# --- 3b. Analyze PSD ---
+
+ax_freq, ax_psd = get_psd(ax_b, fs=sample_frequency, nperseg=1024)
+plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input data)")
+print(f"{len(ax_b)=}, {len(ax_psd)=}")
+
+ax_f_freq, ax_f_psd = get_psd(ax_f, fs=sample_frequency, nperseg=1024)
+plot_psd(ax_f_freq, ax_f_psd, title="PSD of Ax_f (truncated dataset)")
+print(f"{len(ax_f)=}, {len(ax_f_psd )=}")
 
 # --- 4. Sensor vs Center of Gravity TRANSLATION & BIAS REMOVAL ---
 rx, ry, rz = 0.0, 0.0, 0.0
@@ -491,39 +511,40 @@ plt.show()
 scene.title = "Rocket Launch Simulation"
 scene.width = 800
 scene.height = 600
-light_gray = vector(0.8, 0.8, 0.8)
-scene.background = light_gray
+for loop in range(20):
+    light_gray = vector(0.8, 0.8, 0.8)
+    scene.background = light_gray
 
-# Camera settings: 220 m away on negative x-axis, looking at origin (launch site)
-scene.camera.pos = vector(-220, -220, 50)  # viewer position
-scene.camera.axis = vector(220, 220, 80)  # vector from camera to launch site
-scene.up = vector(0, 0, 1)  # z-axis is up
+    # Camera settings: 220 m away on negative x-axis, looking at origin (launch site)
+    scene.camera.pos = vector(-220, -220, 50)  # viewer position
+    scene.camera.axis = vector(220, 220, 80)  # vector from camera to launch site
+    scene.up = vector(0, 0, 1)  # z-axis is up
 
-# Ground plane
-ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
+    # Ground plane
+    ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
 
-# Rocket
-rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue,
-                make_trail=True, trail_color=color.yellow, retain=500)
+    # Rocket
+    rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue,
+                    make_trail=True, trail_color=color.yellow, retain=500)
 
-# scene.center = rocket.pos + vector(0,0,0)
+    # World Axes for reference - 50m in length
+    x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=.8, color=color.red)
+    y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=.8, color=color.green)
+    z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=.8, color=color.blue)
 
-# World Axes for reference - 50m in length
-x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=.8, color=color.red)
-y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=.8, color=color.green)
-z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=.8, color=color.blue)
+    # Axis labels - RGB=RHR
+    label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
+    label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
+    data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True,
+                       background=vector(0.9, 0.9, 0.9), opacity=1.0, height=12)
 
-# Axis labels - RGB=RHR
-label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
-label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
+    # Animation loop
+    for i in range(0, len(px_f)):
+        flighttime = time_t[i] - time_t[0]
+        rate(5)
+        rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
 
-# Animation loop
-for i in range(0, len(px_f)):
-    flighttime = time_t[i] - time_t[0]
-    rate(5)
-    rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
+        # label for altitude and flight time
+        data_label.text = f"Alt={pz_f[i]:.1f}m, t={flighttime:.1f}, v={vz[i] + G_EARTH:.1f}m/s"
 
-    # label for altitude and flight time
-    label(pos=vector(100, -50, 25), text=f"Alt={pz_f[i]:.1f}m, t={flighttime:.1f}", color=color.black, box=True,
-          # show background box
-          background=vector(0.9, 0.9, 0.9), opacity=1.0, height=12)
+    sleep(3)
