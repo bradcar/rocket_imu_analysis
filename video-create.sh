@@ -13,4 +13,4 @@ ffmpeg -framerate 2 -i video/frame_%04d.png -c:v libx264 -pix_fmt yuv420p video/
 open video/$VIDEO_NAME
 
 # if need to clean up frames in download
-# rm frame_0*.png
+# rm ~/Downloads/frame_0*.png

@@ -22,7 +22,7 @@ Rocket IMU Data issues Issues:
 - Gyro shows lots of tumbling after chute deploy gimbal lock issues, should use quaternions.
 - Gyro data makes post-apogee analysis tricky
 
-## Analysis code based on on SOURCE:
+## Analysis code based on SOURCE:
 THANKS!
 
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
