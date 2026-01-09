@@ -43,9 +43,11 @@ SOURCE Ideas:
 from time import sleep
 
 import matplotlib.pyplot as plt
+import math
 import numpy as np
 from scipy import signal
-from vpython import sphere, box, vector, arrow, color, rate, scene, label
+
+from vpython import sphere, box, vector, arrow, color, rate, scene, label, compound, cross
 
 np.set_printoptions(precision=10)
 
@@ -229,6 +231,40 @@ def rms_from_psd(df_psd):
     df_rms = df_rms.cumsum()
     return df_rms ** 0.5
 
+def create_body_arrows():
+    # Dynamic IMU body axes: r in x, green in y, blue in z, RGB in RHS
+    arrow_x = arrow(length=3, shaftwidth=.1, color=color.red)
+    arrow_y = arrow(length=3, shaftwidth=.1, color=color.green)
+    arrow_z = arrow(length=3, shaftwidth=.1, color=color.blue)
+    return arrow_x, arrow_y, arrow_z
+
+# Quaternion helper functions - Hamilton names r, i, j, k
+def quaternion_rotate(q, v):
+    qr, qi, qj, qk = q
+    qv = vector(qi, qj, qk)
+    return v + 2 * cross(qv, cross(qv, v) + qr * v)
+
+
+def quaternion_multiply(q1, q2):
+    r1, i1, j1, k1 = q1
+    r2, i2, j2, k2 = q2
+    return (
+        r1 * r2 - i1 * i2 - j1 * j2 - k1 * k2,
+        r1 * i2 + i1 * r2 + j1 * k2 - k1 * j2,
+        r1 * j2 - i1 * k2 + j1 * r2 + k1 * i2,
+        r1 * k2 + i1 * j2 - j1 * i2 + k1 * r2
+    )
+
+def quaternion_conjugate(q):
+    qr, qi, qj, qk = q
+    return qr, -qi, -qj, -qk
+
+def quaternion_normalize(qr: float, qi: float, qj: float, qk: float) -> tuple:
+    mag_sq = qr ** 2 + qi ** 2 + qj ** 2 + qk ** 2
+    if mag_sq < 0.000001:  # Check for near-zero magnitude
+        return 1.0, 0.0, 0.0, 0.0
+    n = math.sqrt(mag_sq)
+    return qr / n, qi / n, qj / n, qk / n
 
 ##############################################################
 
@@ -302,7 +338,7 @@ add_2d_plot_note("hand adjusted flight duration")
 plt.savefig(f"{plot_directory}/corrected-lauch-chute-plot.pdf")
 plt.show()
 
-# --- 3. FILTERING ---
+# --- 3. FILTERING Data ---
 # only perform simple IIR filter to see the error in the acceleration x-axis
 ax_iir = simple_firstorder_iir_filter(ax_t, 0.5)
 
@@ -332,6 +368,11 @@ print(f"{len(ax_b)=}, {len(ax_psd)=}")
 ax_f_freq, ax_f_psd = get_psd(ax_f, fs=sample_frequency, nperseg=1024)
 plot_psd(ax_f_freq, ax_f_psd, title="PSD of Ax_f (truncated dataset)")
 print(f"{len(ax_f)=}, {len(ax_f_psd )=}")
+
+# REMOVE FILTERING
+ax_f, ay_f, az_f = ax_t, ay_t, az_t
+gr_f, gp_f, gy_f = gr_t, gp_t, gy_t
+
 
 # --- 4. Sensor vs Center of Gravity TRANSLATION & BIAS REMOVAL ---
 rx, ry, rz = 0.0, 0.0, 0.0
@@ -506,45 +547,82 @@ ax3d.set_ylim(y_center - half, y_center + half)
 plt.savefig(f"{plot_directory}/flight-path.pdf")
 plt.show()
 
-# --- VPython: 3D Rocket Launch Visualization ---
-# Set scene
-scene.title = "Rocket Launch Simulation"
-scene.width = 800
-scene.height = 600
-for loop in range(20):
-    light_gray = vector(0.8, 0.8, 0.8)
-    scene.background = light_gray
 
-    # Camera settings: 220 m away on negative x-axis, looking at origin (launch site)
-    scene.camera.pos = vector(-220, -220, 50)  # viewer position
-    scene.camera.axis = vector(220, 220, 80)  # vector from camera to launch site
-    scene.up = vector(0, 0, 1)  # z-axis is up
+def animate_projectile(time_t, px_f, py_f, pz_f, vz, q):
+    """
+     VPython: 3D Rocket Launch Visualization
 
-    # Ground plane
-    ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
+     from vpython import sphere, box, vector, arrow, color, rate, scene, label, compound, cross
 
-    # Rocket
-    rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue,
-                    make_trail=True, trail_color=color.yellow, retain=500)
+    :param q: quaternion for body
+    :param time_t: time stamp at position i
+    :param px_f: position in X
+    :param py_f: position in Y
+    :param pz_f: position in Z
+    :param vz: vertical velocity
+    :return:
+    """
+    # --- ---
+    # Set scene
+    scene.title = "Rocket Launch Simulation"
+    scene.width = 800
+    scene.height = 600
+    for loop in range(20):
+        light_gray = vector(0.8, 0.8, 0.8)
+        scene.background = light_gray
 
-    # World Axes for reference - 50m in length
-    x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=.8, color=color.red)
-    y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=.8, color=color.green)
-    z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=.8, color=color.blue)
+        # Camera settings: 220 m away on negative x-axis, looking at origin (launch site)
+        scene.camera.pos = vector(-220, -220, 50)  # viewer position
+        scene.camera.axis = vector(220, 220, 80)  # vector from camera to launch site
+        scene.up = vector(0, 0, 1)  # z-axis is up
 
-    # Axis labels - RGB=RHR
-    label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
-    label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
-    data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True,
-                       background=vector(0.9, 0.9, 0.9), opacity=1.0, height=12)
+        # Ground plane
+        ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
 
-    # Animation loop
-    for i in range(0, len(px_f)):
-        flighttime = time_t[i] - time_t[0]
-        rate(5)
-        rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
+        # Rocket
+        rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue,
+                        make_trail=True, trail_color=color.yellow, retain=500)
+        # arrow_body_x, arrow_body_y, arrow_body_z = create_body_arrows()
+        # rocket = compound([rocket, arrow_body_x, arrow_body_y, arrow_body_z])
 
-        # label for altitude and flight time
-        data_label.text = f"Alt={pz_f[i]:.1f}m, t={flighttime:.1f}, v={vz[i] + G_EARTH:.1f}m/s"
+        # # VPython Reference Vectors - the static world axes
+        # world_x = vector(1, 0, 0)
+        # world_y = vector(0, 1, 0)
+        # world_z = vector(0, 0, 1)
 
-    sleep(3)
+        # q_rel = quaternion_multiply(quaternion_conjugate(q[0]), q[i])
+        # # Rotate World vectors to find the current Body vectors
+        # body_x = quaternion_rotate(q_rel, world_x)
+        # body_y = quaternion_rotate(q_rel, world_y)
+        # body_z = quaternion_rotate(q_rel, world_z)
+        # # Update Arrow body, x left/right, y: up/down, Z: in/out
+        # arrow_body_x.axis = body_x
+        # arrow_body_y.axis = body_y
+        # arrow_body_z.axis = body_z
+
+        # ground reference plane
+        # World Axes for reference - 50m in length
+        x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=.8, color=color.red)
+        y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=.8, color=color.green)
+        z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=.8, color=color.blue)
+
+        # Axis labels - RGB=RHR
+        label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
+        label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
+        data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True,
+                           background=vector(0.9, 0.9, 0.9), opacity=1.0, height=12)
+
+        # Animation loop
+        for i in range(0, len(px_f)):
+            flight_time = time_t[i] - time_t[0]
+            rate(5)
+            rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
+
+            # label for altitude and flight time
+            data_label.text = f"Alt={pz_f[i]:.1f}m, t={flight_time:.1f}, v={vz[i] + G_EARTH:.1f}m/s"
+
+        sleep(3)
+
+
+animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
+
