@@ -4,10 +4,10 @@ Rocket trajectory post-flight analysis.
 
 Data flow: raw → truncated → filtered → bias-corrected → inertial.
 
-Cast input data to FP64, Numpy defaults to 64-bit.
+Cast input raw_input_data to FP64, Numpy defaults to 64-bit.
 
 NAMING CONVENTION:
-Preliminary data procesing
+Preliminary raw_input_data procesing
     ax_t, ay_t, az_t   : truncated accel (flight window)
     gr_t, gp_t, gy_t   : truncated gyro (flight window)
     ax_f, ay_f, az_f   : accel filtered values (flight window)
@@ -41,18 +41,17 @@ SOURCE Ideas:
     https://www.youtube.com/watch?v=mb1RNYKtWQE
 """
 
-from math import acos, sin, pi
-
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
-from vpython import sphere, box, vector, arrow, color, rate, scene, label, cross
+
+from mylib.animate_projectile import animate_projectile
 
 np.set_printoptions(precision=10)
 
 # --- CONSTANTS & UTILITIES ---
 G_EARTH = 9.81
-filename = "data/launch_data.txt"
+filename = "raw_input_data/launch_data.txt"
 plot_directory = "plots"
 
 
@@ -106,7 +105,7 @@ def estimate_attitude_trapezoidal(
     """
     Attitude estimation using trapezoidal integration of quaternion kinematics.
     Trapezoidal better tha Runge-Kutta in this case, because
-    - Stable with noisy data
+    - Stable with noisy raw_input_data
     - Works with irregular timestamps
     - Cancels some high-frequency noise
     - Matches post-flight analysis best practices (NASA, ESA)
@@ -114,7 +113,7 @@ def estimate_attitude_trapezoidal(
     q is the time history of the body’s orientation, expressed as a unit quaternion mapping the body frame to the inertial frame
 
     Uses accelerometer for gravity direction correction and gyro for propagation.
-    Trapezoidal/Euler integration is preferred over Runge-Kutta for noisy IMU data
+    Trapezoidal/Euler integration is preferred over Runge-Kutta for noisy IMU raw_input_data
     with irregular timestamps.
 
     Returns roll, pitch, yaw (rad) and quaternion history.
@@ -180,7 +179,7 @@ def get_psd(signal_vector, fs, nperseg=1024):
 
     Usage:
         ax_freq, ax_psd = get_psd(ax_b, fs=sample_frequency, nperseg=1024)
-        plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input data)")
+        plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
         print(f"{len(ax_b)=}, {len(ax_psd)=}")
 
     :param signal_vector: input
@@ -231,45 +230,6 @@ def rms_from_psd(df_psd):
     return df_rms ** 0.5
 
 
-def create_body_arrows():
-    # Dynamic IMU body axes: r in x, green in y, blue in z, RGB in RHS
-    arrow_x = arrow(length=3, shaftwidth=.1, color=color.red)
-    arrow_y = arrow(length=3, shaftwidth=.1, color=color.green)
-    arrow_z = arrow(length=3, shaftwidth=.1, color=color.blue)
-    return arrow_x, arrow_y, arrow_z
-
-
-# Quaternion helper functions - Hamilton names r, i, j, k
-def quaternion_rotate(q, v):
-    qr, qi, qj, qk = q
-    qv = vector(qi, qj, qk)
-    return v + 2 * cross(qv, cross(qv, v) + qr * v)
-
-
-def quaternion_multiply(q1, q2):
-    r1, i1, j1, k1 = q1
-    r2, i2, j2, k2 = q2
-    return (
-        r1 * r2 - i1 * i2 - j1 * j2 - k1 * k2,
-        r1 * i2 + i1 * r2 + j1 * k2 - k1 * j2,
-        r1 * j2 - i1 * k2 + j1 * r2 + k1 * i2,
-        r1 * k2 + i1 * j2 - j1 * i2 + k1 * r2
-    )
-
-
-def quaternion_conjugate(q):
-    qr, qi, qj, qk = q
-    return qr, -qi, -qj, -qk
-
-
-def quaternion_normalize(qr: float, qi: float, qj: float, qk: float) -> tuple:
-    mag_sq = qr ** 2 + qi ** 2 + qj ** 2 + qk ** 2
-    if mag_sq < 0.000001:  # Check for near-zero magnitude
-        return 1.0, 0.0, 0.0, 0.0
-    n = math.sqrt(mag_sq)
-    return qr / n, qi / n, qj / n, qk / n
-
-
 ##############################################################
 
 # --- 1. DATA LOADING & ANALYSIS ---
@@ -301,6 +261,9 @@ if np.any(post_launch_mask):
 else:
     tland = time[-1]
 
+# # TODO REMOVE THIS analysis for entire duration
+# tland = time[-1]
+
 plt.figure(figsize=(10, 4))
 plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=1.0)
 plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
@@ -317,12 +280,14 @@ plt.show()
 # Hand-adjusted launch/land times
 tlaunch = 874.6
 tland = 882.9
+# # TODO REMOVE THIS analysis for entire duration
+# tland = 919
 
 print(f"Detected Launch: {tlaunch:.2f}s")
 print(f"Detected Chute Deploy: {tland:.2f}s")
 print(f"Flight Duration: {tland - tlaunch:.2f}s")
 
-# Truncate data for flight window + buffer
+# Truncate raw_input_data for flight window + buffer
 buffer = 1.0
 time_t = truncate(time, time, tlaunch - buffer, tland + buffer)
 ax_t, ay_t, az_t = [truncate(v, time, tlaunch - buffer, tland + buffer) for v in [ax_b, ay_b, az_b]]
@@ -366,7 +331,7 @@ plt.show()
 # --- 3b. Analyze PSD ---
 
 ax_freq, ax_psd = get_psd(ax_b, fs=sample_frequency, nperseg=1024)
-plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input data)")
+plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
 print(f"{len(ax_b)=}, {len(ax_psd)=}")
 
 ax_f_freq, ax_f_psd = get_psd(ax_f, fs=sample_frequency, nperseg=1024)
@@ -404,7 +369,7 @@ plt.xlim(tlaunch - 0.8, tlaunch + 0.2)
 plt.title("Step 4: Static Bias Correction (Pre-Launch Window) Center Gravity & Bias Correction")
 plt.legend()
 plt.grid(True)
-add_2d_plot_note("orig IMU data should zero bias")
+add_2d_plot_note("orig IMU raw_input_data should zero bias")
 plt.savefig(f"{plot_directory}/imu-bias-plot.pdf")
 plt.show()
 
@@ -550,138 +515,5 @@ ax3d.set_ylim(y_center - half, y_center + half)
 plt.savefig(f"{plot_directory}/flight-path.pdf")
 plt.show()
 
-
-def quaternion_to_omega(q_prev, q_curr, dt):
-    # Relative rotation quaternion
-    dq = quaternion_multiply(quaternion_conjugate(q_prev), q_curr)
-
-    # Normalize & clamp scalar
-    mag = (dq[0]**2 + dq[1]**2 + dq[2]**2 + dq[3]**2)**0.5
-    dq = [x / mag for x in dq]
-    w = max(-1.0, min(1.0, dq[0]))
-
-    # Rotation angle with
-    theta = 2.0 * acos(w)
-    if theta < 1e-6 or dt <= 0:
-        return 0.0, 0.0, 0.0
-
-    # Rotation axis
-    s = sin(theta / 2.0)
-    axis = (dq[1] / s, dq[2] / s, dq[3] / s)
-
-    # Angular velocity (world frame)
-    return tuple(theta / dt * a for a in axis)
-
-def animate_projectile(time_t, px_f, py_f, pz_f, vz, q):
-    """
-     VPython: 3D Rocket Launch Visualization
-
-     from vpython import sphere, box, vector, arrow, color, rate, scene, label, compound, cross
-     from math import acos, sin
-
-    :param q: quaternion for body
-    :param time_t: time stamp at position i
-    :param px_f: position in X
-    :param py_f: position in Y
-    :param pz_f: position in Z
-    :param vz: vertical velocity
-    :return:
-    """
-    # --- ---
-    # Set scene
-    scene.title = "Rocket Launch Simulation"
-    scene.width = 800
-    scene.height = 600
-    scene.background = vector(0.8, 0.8, 0.8)
-
-    # Camera settings
-    scene.camera.pos = vector(-220, -220, 30)
-    scene.camera.axis = vector(220, 220, 80)
-    scene.up = vector(0, 0, 1)
-
-    # Ground plane
-    ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
-
-    # Rocket body
-    rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue, make_trail=True,
-                    trail_color=color.yellow, retain=500)
-
-    # World Reference orintation
-    world_x = vector(1, 0, 0)
-    world_y = vector(0, 1, 0)
-    world_z = vector(0, 0, 1)
-
-    arrow_scale = 25
-    arrow_body_x = arrow(pos=rocket.pos, axis=arrow_scale * world_x, shaftwidth=1.5, color=color.red)
-    arrow_body_y = arrow(pos=rocket.pos, axis=arrow_scale * world_y, shaftwidth=1.5, color=color.green)
-    arrow_body_z = arrow(pos=rocket.pos, axis=arrow_scale * world_z, shaftwidth=1.5, color=color.blue)
-
-    # World axes for reference
-    x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=0.8, color=color.red)
-    y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=0.8, color=color.green)
-    z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=0.8, color=color.blue)
-
-    label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
-    label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
-
-    data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
-                       opacity=1.0, height=12)
-    omega_label = label(pos=vector(100, 550, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
-                       opacity=1.0, height=12)
-
-    # --- Animation loop ---
-    for i in range(len(px_f)):
-        rate(2)
-
-        # Update rocket position
-        rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
-
-        # Relative quaternion from initial orientation
-        q_rel = quaternion_multiply(quaternion_conjugate(q[0]), q[i])
-
-        # Rotate world axes to body axes
-        body_x = quaternion_rotate(q_rel, world_x)
-        body_y = quaternion_rotate(q_rel, world_y)
-        body_z = quaternion_rotate(q_rel, world_z)
-
-        # Attach arrows to rocket
-        arrow_body_x.pos = rocket.pos
-        arrow_body_y.pos = rocket.pos
-        arrow_body_z.pos = rocket.pos
-
-        # Update arrow orientation
-        arrow_body_x.axis = arrow_scale * body_x
-        arrow_body_y.axis = arrow_scale * body_y
-        arrow_body_z.axis = arrow_scale * body_z
-
-        # Update Altitude, timestamp, and velocity label
-        flight_time = time_t[i] - time_t[0]
-        data_label.text = (
-            f"Alt={pz_f[i]:.1f} m\n"
-            f"t={flight_time:.1f} s\n"
-            f"v={vz[i] + G_EARTH:.1f} m/s"
-        )
-
-        # Calc Angular velocity from quaternion change, change to degree/sec
-        rad2deg = 180.0 / pi
-        if i > 0:
-            dt = time_t[i] - time_t[i - 1]
-            wx, wy, wz = quaternion_to_omega(q[i - 1], q[i], dt)
-            wx *= rad2deg
-            wy *= rad2deg
-            wz *= rad2deg
-        else:
-            wx, wy, wz = 0.0, 0.0, 0.0
-
-        omega_label.text = (
-            "deg/s (world)\n"
-            f"x° = {wx:.0f}°/s\n"
-            f"y° = {wy:.0f}°/s\n"
-            f"z° = {wz:.0f}°/s"
-        )
-
-
-
-animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
-animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
-animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
+# animation of projectile in vpython using this raw_input_data
+animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f)
