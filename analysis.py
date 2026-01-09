@@ -39,59 +39,86 @@ Body axes rotate with the body; inertial axes are fixed to Earth.
 Outline of Analysis Pipeline
 ----------------------------
 Data Truncation & Filtering:
-    truncate(outvec, timevec, tlaunch, tland) → Crop a vector to a time window. tland really apogee
-    butterworth filter
-    simple_firstorder_iir_filter(vec, tau) → Apply a simple IIR low-pass filter.
+    truncate(outvec, timevec, tlaunch, tland)
+        → Crop a vector to a time window. tland really apogee
+    butterworth filter - BETTER THAN IIR
+    simple_firstorder_iir_filter(vec, tau)
+        → Apply a simple IIR low-pass filter.
     *** Note we don't use either given rocket's small number samples and low noise
 
 Spectral Analysis - verifies low noise
-    get_psd(signal_vector, fs, nperseg=1024) → Compute power spectral density of a signal.
-    rms_from_psd(df_psd) → Compute cumulative RMS from PSD.
+    get_psd(signal_vector, fs, nperseg=1024)
+        → Compute power spectral density of a signal see if noise present
+    rms_from_psd(df_psd) → Compute cumulative RMS from PSD
 
 Quaternion / Attitude
-    compute_gravity_error(qi, axi, ayi, azi) → Compute gravity alignment error for Mahony filter.
-    estimate_attitude_mahony_trapezoidal(time_t, ax, ay, az, gr, gp, gy, twokp=1.0) → Estimate body orientation as quaternions and Euler angles using trapezoidal Mahony filter.
-    body_to_inertial_acceleration(time_t, ax_b, ay_b, az_b, q) → Transform body-frame accelerations to inertial frame with gravity removed.
+    compute_gravity_error(qi, axi, ayi, azi)
+        → Compute gravity alignment error for Mahony filter
+    estimate_attitude_mahony_trapezoidal(time_t, ax, ay, az, gr, gp, gy, twokp=1.0)
+        → Est body orientation as quaternions & Euler angles with trapezoidal Mahony filter
+    body_to_inertial_acceleration(time_t, ax_b, ay_b, az_b, q)
+        → Transform body-frame accelerations to inertial frame with gravity removed
 
 Integration:
-    integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=None) → Double-integrate inertial accelerations to get velocity and position with drift compensation.
+    integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=None)
+        → Double-integrate inertial accel to get vel & position with drift compensation
 
 Correction for Center gravity - rocket CG vs sensor position:
-    correct_for_cog(ax, ay, az, gr, gp, gy, rx=0.0, ry=0.0, rz=0.0, dt=0.01) → Translate body-frame accelerations to center-of-gravity frame.
+    correct_for_cog(ax, ay, az, gr, gp, gy, rx=0.0, ry=0.0, rz=0.0, dt=0.01)
+        → Translate body-frame accelerations to center-of-gravity frame.
 
 Sensor Correction:
-    remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch) → Remove accelerometer and gyro bias using pre-launch window.
-
+    remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch)
+        → Remove accelerometer and gyro bias using pre-launch window
 
 BNO086 Sensor Simplification:
-    The BNO086 already provides fused quaternions (body → inertial) and linear acceleration (gravity subtracted).
+=============================
+    The BNO086 already provides fused quaternions (body → inertial) and
+    linear acceleration (gravity subtracted).
+
+    OUPUT NEEDED: 22 bytes per sample
+     - timestamp - 2 bytes
+     - quaternion - 8 bytes
+     - linear_acceleration - 6 bytes
+     - gyroscope - 6 bytes
+     estimate total of 80K at 10KiB/s
+     estimate total of 80K at 10KiB/s
+     - 76,800 bytes of data in 8 sec = transfer of about 10k/sec
+     - 400 Hz * 24 bytes * 8 second (6 to 6.5 sec apogee + > 1 to 1.5 sec post burst)
 
     No need for:
     - Mahony or complementary filter integration
     - Manual gravity removal
-     - Bias removal is mostly done with BNO086.
-    - High sample rate + good sensor: you may skip manual low-pass filtering unless you want to remove residual vibration noise.
-    Optional: a mild low-pass filter (10–50 Hz cutoff) if your vehicle vibrates. Test with PSD graph.
+    - Bias removal is mostly done with BNO086 & calibration
+    Optional: a mild low-pass filter (10–50 Hz cutoff), test with PSD graph
 
-    May still need COG correction (if the IMU is rigidly attached near the CG)
+    May still need COG correction (depends on rotation rate & distance
+     8" shell: 4" away from CG)
+     - with rotation ω = 30 deg/s ≈ 0.52 rad/s
+     - r = 0.102 m (4" on an 8" shell)
+     - Centripetal acceleration a = ω^2 r = 0.028 m/s² (0.3% of 9.8 m/s²)
 
-    Integration:
-    - Need to integrate linear acceleration → velocity → position:
-        x, y, z = bno.linear_acceleration   # linear accel 3-tuple of x,y,z float returned with no gravity!
+    Double Integration:
+    - Need to double integrate: linear acceleration → velocity → position:
+        x, y, z = bno.linear_acceleration   # linear accel with no gravity!
     - Can skip linear drift compensation
 
     Simplified pipeline:
-    - Read sensor → quaternion + linear_acceleration + gyroscope
-    - Optional filtering → mild low-pass on linear acceleration
-    - Inertial velocities → integrate linear acceleration
-    - Inertial positions → integrate velocities (optional drift correction)
-    - Visualization → 3D path, velocity, orientation
+    - Read sensor → quaternion + linear_acceleration (no Gravity) + gyroscope
+    - Optional filtering
+        → mild low-pass on linear acceleration?
+    - Inertial velocities
+        → integrate linear acceleration
+    - Inertial positions
+        → integrate velocities (optional drift correction)
+    - Visualization
+        → 3D path, velocity, orientation
 
     To Calibrate before launch
     - Linear acceleration with gravity (raw accelerometer minus biases)
     - Gives true specific force + gravity
     Useful for:
-    x, y, z = bno.acceleration # acceleration 3-tuple of x,y,z float returned (gravity direction included)
+        x, y, z = bno.acceleration # acceleration with gravity direction included
     _ Detecting orientation to Earth before lauch
     - Checking sensor calibration (should read ~9.81 m/s² when stationary)
     - Redundant safety check
@@ -339,7 +366,7 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=
     return vx_c, vy_c, vz_c, px_f, py_f, pz_f
 
 
-def correct_for_cog(ax, ay, az, gr, gp, gy, rx=0.0, ry=0.0, rz=0.0, dt=0.01):
+def correct_for_cog(ax, ay, az, gr, gp, gy, dt=0.0025, r_offset=0.102):
     """
     Translate body-frame accelerations to center of gravity.
     :param ax: x-acceleration (m/s^2)
@@ -348,22 +375,32 @@ def correct_for_cog(ax, ay, az, gr, gp, gy, rx=0.0, ry=0.0, rz=0.0, dt=0.01):
     :param gr: roll gravity (m/s^2)
     :param gp: pitch gravity (m/s^2)
     :param gy: yaw y-acceleration (m/s^2)
-    :param rx: roll x-acceleration (m/s^2)
-    :param ry: yaw x-acceleration (m/s^2)
-    :param rz: roll z-acceleration (m/s^2)
     :param dt:
+    :param r_offset:
 
     :return: ax_cg
     : ay_cg
     : az_cg
     """
-    gr_dot, gp_dot, gy_dot = np.gradient(gr, dt), np.gradient(gp, dt), np.gradient(gy, dt)
+    # Compute angular acceleration (rad/s²)
+    gr_dot = np.gradient(gr, dt)
+    gp_dot = np.gradient(gp, dt)
+    gy_dot = np.gradient(gy, dt)
 
-    ax_cg = ax - (-(gp ** 2 + gy ** 2) * rx + (gr * gp - gy_dot) * ry + (gr * gy + gp_dot) * rz)
-    ay_cg = ay - ((gr * gp + gy_dot) * rx - (gr ** 2 + gy ** 2) * ry + (gp * gy - gr_dot) * rz)
-    az_cg = az - ((gr * gy - gp_dot) * rx + (gp * gy + gr_dot) * ry - (gr ** 2 + gp ** 2) * rz)
+    # Estimate rotational acceleration error along each axis
+    ax_err = r_offset * (gr_dot + gr ** 2)
+    ay_err = r_offset * (gp_dot + gp ** 2)
+    az_err = r_offset * (gy_dot + gy ** 2)
 
-    return ax_cg, ay_cg, az_cg
+    # Correct accelerations by subtracting estimated rotational contribution
+    ax_cg = ax - ax_err
+    ay_cg = ay - ay_err
+    az_cg = az - az_err
+
+    # Max error magnitude for reference
+    a_error_mag = np.sqrt(ax_err ** 2 + ay_err ** 2 + az_err ** 2)
+
+    return ax_cg, ay_cg, az_cg, a_error_mag
 
 
 def remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch):
@@ -430,9 +467,13 @@ def plot_psd(f, psd, title="Power Spectral Density"):
     plt.show()
 
 
-def rms_from_psd(df_psd):
+def rms_from_psd(psd, df):
     """
-    TODO: Convert from pandas df to numpy array
+    usage:
+    f, psd = get_psd(ax_b, fs=sample_frequency)
+    df = f[1] - f[0]  # frequency spacing
+    rms_cum = rms_from_psd_np(psd[1:], df) # skip DC bin (psd[0])
+
     df_rms = rms_from_psd(psd)
     fig = fig_from_df(df_rms)
     fig.update_xaxes(type="log", title_text="Frequency (Hz)")
@@ -441,11 +482,11 @@ def rms_from_psd(df_psd):
     df_rms.to_csv('cum-rms.csv')
     fig.show()
     """
-    d_f = df_psd.index[1] - df_psd.index[0]
-    df_rms = df_psd.copy()
-    df_rms = df_rms * d_f
-    df_rms = df_rms.cumsum()
-    return df_rms ** 0.5
+    # Multiply PSD by frequency bin width
+    psd_scaled = psd * df
+    psd_cumsum = np.cumsum(psd_scaled)
+    rms_cum = np.sqrt(psd_cumsum)
+    return rms_cum
 
 
 ##############################################################
@@ -479,9 +520,6 @@ if np.any(post_launch_mask):
 else:
     tland = time[-1]
 
-# # TODO REMOVE THIS analysis for entire duration
-# tland = time[-1]
-
 plt.figure(figsize=(10, 4))
 plt.plot(time, A_mag, label="Total Acceleration (A_mag)", color="gray", alpha=1.0)
 plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
@@ -498,8 +536,6 @@ plt.show()
 # Hand-adjusted launch/land times
 tlaunch = 874.6
 tland = 889.5
-# # TODO REMOVE THIS analysis for entire duration
-# tland = 919
 
 print(f"Detected Launch: {tlaunch:.2f}s")
 print(f"Detected Chute Deploy: {tland:.2f}s")
@@ -564,7 +600,16 @@ gr_f, gp_f, gy_f = gr_t, gp_t, gy_t
 rx, ry, rz = 0.0, 0.0, 0.0
 dt = dt_avg
 
-ax_cg, ay_cg, az_cg = correct_for_cog(ax_f, ay_f, az_f, gr_f, gp_f, gy_f, rx, ry, rz, dt)
+# 4 inches offset to meters
+# TODO this is not for this rocket, but fur 8" shell
+inch_offset = 4
+sensor_offset = inch_offset * 0.0254
+ax_cg, ay_cg, az_cg, a_error_mag = correct_for_cog(ax_f, ay_f, az_f, gr_f, gp_f, gy_f, dt, sensor_offset)
+# Print summary
+a_error_max = a_error_mag.max()
+print(
+    f"Est max acceleration error due to {inch_offset}\" offset: {a_error_max:.2f} m/s², {(a_error_max / 9.81) * 100:.0f}%")
+
 ax_final, ay_final, az_final, gr_final, gp_final, gy_final = remove_static_bias(
     ax_cg, ay_cg, az_cg, gr_f, gp_f, gy_f, time_t, tlaunch
 )
