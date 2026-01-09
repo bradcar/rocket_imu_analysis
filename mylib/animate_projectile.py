@@ -4,9 +4,8 @@ Animate projectile with vpython
 """
 
 import os
-from math import pi
 
-from vpython import sphere, box, arrow, color, rate, scene, label
+from vpython import sphere, box, arrow, color, rate, scene, label, vector
 
 from mylib.quaternion_functions import *
 
@@ -34,7 +33,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     scene.capture("frame.png")
 
     # Set scene
-    scene.title = "Rocket Launch Simulation"
+    scene.title = "Rocket Launch Simulation - Note slow flip starts at end of thrust burn"
 
     # light gray
     scene.background = vector(0.8, 0.8, 0.8)
@@ -44,8 +43,8 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     scene.height = 600
 
     # Camera settings
-    scene.camera.pos = vector(-150, -145, 32)
-    scene.camera.axis = vector(150, 145, 75)
+    scene.camera.pos = vector(-265, -290, 47)
+    scene.camera.axis = vector(265, 290, 95)
     scene.up = vector(0, 0, 1)
 
     # World Reference orintation
@@ -82,7 +81,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
 
     # --- Animation loop ---
     for i in range(len(px_f)):
-        rate(2)
+        rate(2)  # 30 frames per second
 
         # Update rocket position
         rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
@@ -90,10 +89,15 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         # Relative quaternion from initial orientation
         q_rel = quaternion_multiply(quaternion_conjugate(q[0]), q[i])
 
-        # Rotate world axes to body axes
-        body_x = quaternion_rotate(q_rel, world_x)
-        body_y = quaternion_rotate(q_rel, world_y)
-        body_z = quaternion_rotate(q_rel, world_z)
+        # --- Rotate world axes to body axes using NumPy ---
+        body_x_np = quaternion_rotate(q_rel, np.array([1.0, 0.0, 0.0]))
+        body_y_np = quaternion_rotate(q_rel, np.array([0.0, 1.0, 0.0]))
+        body_z_np = quaternion_rotate(q_rel, np.array([0.0, 0.0, 1.0]))
+
+        # Convert NumPy arrays to VPython vectors
+        body_x = vector(*body_x_np)
+        body_y = vector(*body_y_np)
+        body_z = vector(*body_z_np)
 
         # Attach arrows to rocket
         arrow_body_x.pos = rocket.pos
@@ -101,11 +105,11 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         arrow_body_z.pos = rocket.pos
 
         # Update arrow orientation
-        arrow_body_x.axis = arrow_scale * body_x
-        arrow_body_y.axis = arrow_scale * body_y
-        arrow_body_z.axis = arrow_scale * body_z
+        arrow_body_x.axis = arrow_scale * body_x.norm()
+        arrow_body_y.axis = arrow_scale * body_y.norm()
+        arrow_body_z.axis = arrow_scale * body_z.norm()
 
-        # Numerical simulation quantity update for Altitude, timestamp, and velocity
+        # --- Numerical display ---
         flight_time = time_t[i] - time_t[0]
         data_label.text = (
             f"Alt={pz_f[i]:.1f} m\n"
@@ -113,8 +117,8 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
             f"v={vz[i] + G_EARTH:.1f} m/s"
         )
 
-        # Calc Angular velocity from quaternion change, change to degree/sec
-        rad2deg = 180.0 / pi
+        # Angular velocity in world frame (deg/s)
+        rad2deg = 180.0 / np.pi
         if i > 0:
             dt = time_t[i] - time_t[i - 1]
             wx, wy, wz = quaternion_to_omega(q[i - 1], q[i], dt)
@@ -131,15 +135,17 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
             f"z° = {wz:.0f}°/s"
         )
 
-        # Trail effect changes
-        # Thick red trail during rocket burn: detected by < 4 sec and high acceleration (>0.5 m/s^2)
+        # Trail effect: red during thrust, yellow during coasting
         if flight_time < 4 and ax_f[i] > 0.5:
             rocket.trail_color = color.red
             rocket.trail_radius = 2.0
-        # Coasting phase shown in thin yellow trail
         else:
             rocket.trail_color = color.yellow
             rocket.trail_radius = 0.5
 
-        # Save png of each from frame
+        # Save frame for video
         scene.capture(f"frame_{i:04d}")
+
+        # Debug to adjust viewer angle
+        # print(f"{scene.camera.pos=}")
+        # print(f"{scene.camera.axis=}")
