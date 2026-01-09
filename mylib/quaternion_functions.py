@@ -2,9 +2,8 @@
 """
 Quaternion helper functions - Hamilton names/order r, i, j, k
 """
-import math
 
-from vpython import cross, vector
+import numpy as np
 
 
 def quaternion_rotate(q, v):
@@ -14,9 +13,12 @@ def quaternion_rotate(q, v):
     :param v:
     :return:
     """
-    qr, qi, qj, qk = q
-    qv = vector(qi, qj, qk)
-    return v + 2 * cross(qv, cross(qv, v) + qr * v)
+    q0, q1, q2, q3 = q
+    v = np.asarray(v, dtype=np.float64)
+    qv = np.array([q1, q2, q3], dtype=np.float64)
+
+    # Rodrigues-style quaternion rotation
+    return v + 2.0 * np.cross(qv, np.cross(qv, v) + q0 * v)
 
 
 def quaternion_multiply(q1, q2):
@@ -58,7 +60,7 @@ def quaternion_normalize(qr: float, qi: float, qj: float, qk: float) -> tuple:
     mag_sq = qr ** 2 + qi ** 2 + qj ** 2 + qk ** 2
     if mag_sq < 0.000001:  # Check for near-zero magnitude
         return 1.0, 0.0, 0.0, 0.0
-    n = math.sqrt(mag_sq)
+    n = np.sqrt(mag_sq)
     return qr / n, qi / n, qj / n, qk / n
 
 
@@ -79,12 +81,12 @@ def quaternion_to_omega(q_prev, q_curr, dt):
     w = max(-1.0, min(1.0, dq[0]))
 
     # Rotation angle with
-    theta = 2.0 * math.acos(w)
+    theta = 2.0 * np.acos(w)
     if theta < 1e-6 or dt <= 0:
         return 0.0, 0.0, 0.0
 
     # Rotation axis
-    s = math.sin(theta / 2.0)
+    s = np.sin(theta / 2.0)
     axis = (dq[1] / s, dq[2] / s, dq[3] / s)
 
     # Angular velocity (world frame)
