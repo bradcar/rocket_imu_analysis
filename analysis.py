@@ -40,14 +40,13 @@ SOURCE Ideas:
     https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
     https://www.youtube.com/watch?v=mb1RNYKtWQE
 """
-from time import sleep
+
+from math import acos, sin, pi
 
 import matplotlib.pyplot as plt
-import math
 import numpy as np
 from scipy import signal
-
-from vpython import sphere, box, vector, arrow, color, rate, scene, label, compound, cross
+from vpython import sphere, box, vector, arrow, color, rate, scene, label, cross
 
 np.set_printoptions(precision=10)
 
@@ -231,12 +230,14 @@ def rms_from_psd(df_psd):
     df_rms = df_rms.cumsum()
     return df_rms ** 0.5
 
+
 def create_body_arrows():
     # Dynamic IMU body axes: r in x, green in y, blue in z, RGB in RHS
     arrow_x = arrow(length=3, shaftwidth=.1, color=color.red)
     arrow_y = arrow(length=3, shaftwidth=.1, color=color.green)
     arrow_z = arrow(length=3, shaftwidth=.1, color=color.blue)
     return arrow_x, arrow_y, arrow_z
+
 
 # Quaternion helper functions - Hamilton names r, i, j, k
 def quaternion_rotate(q, v):
@@ -255,9 +256,11 @@ def quaternion_multiply(q1, q2):
         r1 * k2 + i1 * j2 - j1 * i2 + k1 * r2
     )
 
+
 def quaternion_conjugate(q):
     qr, qi, qj, qk = q
     return qr, -qi, -qj, -qk
+
 
 def quaternion_normalize(qr: float, qi: float, qj: float, qk: float) -> tuple:
     mag_sq = qr ** 2 + qi ** 2 + qj ** 2 + qk ** 2
@@ -265,6 +268,7 @@ def quaternion_normalize(qr: float, qi: float, qj: float, qk: float) -> tuple:
         return 1.0, 0.0, 0.0, 0.0
     n = math.sqrt(mag_sq)
     return qr / n, qi / n, qj / n, qk / n
+
 
 ##############################################################
 
@@ -372,7 +376,6 @@ print(f"{len(ax_f)=}, {len(ax_f_psd )=}")
 # REMOVE FILTERING
 ax_f, ay_f, az_f = ax_t, ay_t, az_t
 gr_f, gp_f, gy_f = gr_t, gp_t, gy_t
-
 
 # --- 4. Sensor vs Center of Gravity TRANSLATION & BIAS REMOVAL ---
 rx, ry, rz = 0.0, 0.0, 0.0
@@ -548,11 +551,33 @@ plt.savefig(f"{plot_directory}/flight-path.pdf")
 plt.show()
 
 
+def quaternion_to_omega(q_prev, q_curr, dt):
+    # Relative rotation quaternion
+    dq = quaternion_multiply(quaternion_conjugate(q_prev), q_curr)
+
+    # Normalize & clamp scalar
+    mag = (dq[0]**2 + dq[1]**2 + dq[2]**2 + dq[3]**2)**0.5
+    dq = [x / mag for x in dq]
+    w = max(-1.0, min(1.0, dq[0]))
+
+    # Rotation angle with
+    theta = 2.0 * acos(w)
+    if theta < 1e-6 or dt <= 0:
+        return 0.0, 0.0, 0.0
+
+    # Rotation axis
+    s = sin(theta / 2.0)
+    axis = (dq[1] / s, dq[2] / s, dq[3] / s)
+
+    # Angular velocity (world frame)
+    return tuple(theta / dt * a for a in axis)
+
 def animate_projectile(time_t, px_f, py_f, pz_f, vz, q):
     """
      VPython: 3D Rocket Launch Visualization
 
      from vpython import sphere, box, vector, arrow, color, rate, scene, label, compound, cross
+     from math import acos, sin
 
     :param q: quaternion for body
     :param time_t: time stamp at position i
@@ -567,62 +592,96 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q):
     scene.title = "Rocket Launch Simulation"
     scene.width = 800
     scene.height = 600
-    for loop in range(20):
-        light_gray = vector(0.8, 0.8, 0.8)
-        scene.background = light_gray
+    scene.background = vector(0.8, 0.8, 0.8)
 
-        # Camera settings: 220 m away on negative x-axis, looking at origin (launch site)
-        scene.camera.pos = vector(-220, -220, 50)  # viewer position
-        scene.camera.axis = vector(220, 220, 80)  # vector from camera to launch site
-        scene.up = vector(0, 0, 1)  # z-axis is up
+    # Camera settings
+    scene.camera.pos = vector(-220, -220, 30)
+    scene.camera.axis = vector(220, 220, 80)
+    scene.up = vector(0, 0, 1)
 
-        # Ground plane
-        ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
+    # Ground plane
+    ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
 
-        # Rocket
-        rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue,
-                        make_trail=True, trail_color=color.yellow, retain=500)
-        # arrow_body_x, arrow_body_y, arrow_body_z = create_body_arrows()
-        # rocket = compound([rocket, arrow_body_x, arrow_body_y, arrow_body_z])
+    # Rocket body
+    rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue, make_trail=True,
+                    trail_color=color.yellow, retain=500)
 
-        # # VPython Reference Vectors - the static world axes
-        # world_x = vector(1, 0, 0)
-        # world_y = vector(0, 1, 0)
-        # world_z = vector(0, 0, 1)
+    # World Reference orintation
+    world_x = vector(1, 0, 0)
+    world_y = vector(0, 1, 0)
+    world_z = vector(0, 0, 1)
 
-        # q_rel = quaternion_multiply(quaternion_conjugate(q[0]), q[i])
-        # # Rotate World vectors to find the current Body vectors
-        # body_x = quaternion_rotate(q_rel, world_x)
-        # body_y = quaternion_rotate(q_rel, world_y)
-        # body_z = quaternion_rotate(q_rel, world_z)
-        # # Update Arrow body, x left/right, y: up/down, Z: in/out
-        # arrow_body_x.axis = body_x
-        # arrow_body_y.axis = body_y
-        # arrow_body_z.axis = body_z
+    arrow_scale = 25
+    arrow_body_x = arrow(pos=rocket.pos, axis=arrow_scale * world_x, shaftwidth=1.5, color=color.red)
+    arrow_body_y = arrow(pos=rocket.pos, axis=arrow_scale * world_y, shaftwidth=1.5, color=color.green)
+    arrow_body_z = arrow(pos=rocket.pos, axis=arrow_scale * world_z, shaftwidth=1.5, color=color.blue)
 
-        # ground reference plane
-        # World Axes for reference - 50m in length
-        x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=.8, color=color.red)
-        y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=.8, color=color.green)
-        z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=.8, color=color.blue)
+    # World axes for reference
+    x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=0.8, color=color.red)
+    y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=0.8, color=color.green)
+    z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=0.8, color=color.blue)
 
-        # Axis labels - RGB=RHR
-        label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
-        label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
-        data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True,
-                           background=vector(0.9, 0.9, 0.9), opacity=1.0, height=12)
+    label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
+    label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
 
-        # Animation loop
-        for i in range(0, len(px_f)):
-            flight_time = time_t[i] - time_t[0]
-            rate(5)
-            rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
+    data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
+                       opacity=1.0, height=12)
+    omega_label = label(pos=vector(100, 550, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
+                       opacity=1.0, height=12)
 
-            # label for altitude and flight time
-            data_label.text = f"Alt={pz_f[i]:.1f}m, t={flight_time:.1f}, v={vz[i] + G_EARTH:.1f}m/s"
+    # --- Animation loop ---
+    for i in range(len(px_f)):
+        rate(2)
 
-        sleep(3)
+        # Update rocket position
+        rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
+
+        # Relative quaternion from initial orientation
+        q_rel = quaternion_multiply(quaternion_conjugate(q[0]), q[i])
+
+        # Rotate world axes to body axes
+        body_x = quaternion_rotate(q_rel, world_x)
+        body_y = quaternion_rotate(q_rel, world_y)
+        body_z = quaternion_rotate(q_rel, world_z)
+
+        # Attach arrows to rocket
+        arrow_body_x.pos = rocket.pos
+        arrow_body_y.pos = rocket.pos
+        arrow_body_z.pos = rocket.pos
+
+        # Update arrow orientation
+        arrow_body_x.axis = arrow_scale * body_x
+        arrow_body_y.axis = arrow_scale * body_y
+        arrow_body_z.axis = arrow_scale * body_z
+
+        # Update Altitude, timestamp, and velocity label
+        flight_time = time_t[i] - time_t[0]
+        data_label.text = (
+            f"Alt={pz_f[i]:.1f} m\n"
+            f"t={flight_time:.1f} s\n"
+            f"v={vz[i] + G_EARTH:.1f} m/s"
+        )
+
+        # Calc Angular velocity from quaternion change, change to degree/sec
+        rad2deg = 180.0 / pi
+        if i > 0:
+            dt = time_t[i] - time_t[i - 1]
+            wx, wy, wz = quaternion_to_omega(q[i - 1], q[i], dt)
+            wx *= rad2deg
+            wy *= rad2deg
+            wz *= rad2deg
+        else:
+            wx, wy, wz = 0.0, 0.0, 0.0
+
+        omega_label.text = (
+            "deg/s (world)\n"
+            f"x° = {wx:.0f}°/s\n"
+            f"y° = {wy:.0f}°/s\n"
+            f"z° = {wz:.0f}°/s"
+        )
+
 
 
 animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
-
+animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
+animate_projectile(time_t, px_f, py_f, pz_f, vz, q)
