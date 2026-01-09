@@ -36,6 +36,66 @@ Axis convention (right-handed):
 
 Body axes rotate with the body; inertial axes are fixed to Earth.
 
+Outline of Analysis Pipeline
+----------------------------
+Data Truncation & Filtering:
+    truncate(outvec, timevec, tlaunch, tland) → Crop a vector to a time window. tland really apogee
+    butterworth filter
+    simple_firstorder_iir_filter(vec, tau) → Apply a simple IIR low-pass filter.
+    *** Note we don't use either given rocket's small number samples and low noise
+
+Spectral Analysis - verifies low noise
+    get_psd(signal_vector, fs, nperseg=1024) → Compute power spectral density of a signal.
+    rms_from_psd(df_psd) → Compute cumulative RMS from PSD.
+
+Quaternion / Attitude
+    compute_gravity_error(qi, axi, ayi, azi) → Compute gravity alignment error for Mahony filter.
+    estimate_attitude_mahony_trapezoidal(time_t, ax, ay, az, gr, gp, gy, twokp=1.0) → Estimate body orientation as quaternions and Euler angles using trapezoidal Mahony filter.
+    body_to_inertial_acceleration(time_t, ax_b, ay_b, az_b, q) → Transform body-frame accelerations to inertial frame with gravity removed.
+
+Integration:
+    integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=None) → Double-integrate inertial accelerations to get velocity and position with drift compensation.
+
+Correction for Center gravity - rocket CG vs sensor position:
+    correct_for_cog(ax, ay, az, gr, gp, gy, rx=0.0, ry=0.0, rz=0.0, dt=0.01) → Translate body-frame accelerations to center-of-gravity frame.
+
+Sensor Correction:
+    remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch) → Remove accelerometer and gyro bias using pre-launch window.
+
+
+BNO086 Sensor Simplification:
+    The BNO086 already provides fused quaternions (body → inertial) and linear acceleration (gravity subtracted).
+
+    No need for:
+    - Mahony or complementary filter integration
+    - Manual gravity removal
+     - Bias removal is mostly done with BNO086.
+    - High sample rate + good sensor: you may skip manual low-pass filtering unless you want to remove residual vibration noise.
+    Optional: a mild low-pass filter (10–50 Hz cutoff) if your vehicle vibrates. Test with PSD graph.
+
+    May still need COG correction (if the IMU is rigidly attached near the CG)
+
+    Integration:
+    - Need to integrate linear acceleration → velocity → position:
+        x, y, z = bno.linear_acceleration   # linear accel 3-tuple of x,y,z float returned with no gravity!
+    - Can skip linear drift compensation
+
+    Simplified pipeline:
+    - Read sensor → quaternion + linear_acceleration + gyroscope
+    - Optional filtering → mild low-pass on linear acceleration
+    - Inertial velocities → integrate linear acceleration
+    - Inertial positions → integrate velocities (optional drift correction)
+    - Visualization → 3D path, velocity, orientation
+
+    To Calibrate before launch
+    - Linear acceleration with gravity (raw accelerometer minus biases)
+    - Gives true specific force + gravity
+    Useful for:
+    x, y, z = bno.acceleration # acceleration 3-tuple of x,y,z float returned (gravity direction included)
+    _ Detecting orientation to Earth before lauch
+    - Checking sensor calibration (should read ~9.81 m/s² when stationary)
+    - Redundant safety check
+
 SOURCE Ideas:
     https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
     https://www.youtube.com/watch?v=mb1RNYKtWQE
@@ -46,6 +106,7 @@ import numpy as np
 from scipy import signal
 
 from mylib.animate_projectile import animate_projectile
+from mylib.quaternion_functions import quaternion_rotate
 
 np.set_printoptions(precision=10)
 
@@ -96,14 +157,38 @@ def add_2d_plot_note(note_text, ax=None, x=0.65, y=0.10, fontsize=9, color="gree
     )
 
 
-def estimate_attitude_trapezoidal(
-        time_t,
-        ax, ay, az,
-        gr, gp, gy,
-        twokp=1.0
-):
+def compute_gravity_error(qi, axi, ayi, azi):
+    """
+    Compute Mahony gravity-direction error vector.
+
+    Parameters:
+        qi  : quaternion at time i, shape (4,)
+        axi : normalized accelerometer x
+        ayi : normalized accelerometer y
+        azi : normalized accelerometer z
+
+    Returns:
+        ex, ey, ez : gravity alignment error vector
+    """
+
+    # Estimated gravity direction from quaternion
+    vx = 2.0 * (qi[1] * qi[3] - qi[0] * qi[2])
+    vy = 2.0 * (qi[0] * qi[1] + qi[2] * qi[3])
+    vz = qi[0] ** 2 - 0.5 + qi[3] ** 2
+
+    # Gravity error (cross product: measured vs estimated)
+    ex = ayi * vz - azi * vy
+    ey = azi * vx - axi * vz
+    ez = axi * vy - ayi * vx
+
+    return ex, ey, ez
+
+
+def estimate_attitude_mahony_trapezoidal(time_t, ax, ay, az, gr, gp, gy, twokp=1.0):
     """
     Attitude estimation using trapezoidal integration of quaternion kinematics.
+    Mahony-style complementary filter using quaternion kinematics and trapezoidal integration
+
     Trapezoidal better tha Runge-Kutta in this case, because
     - Stable with noisy raw_input_data
     - Works with irregular timestamps
@@ -116,7 +201,9 @@ def estimate_attitude_trapezoidal(
     Trapezoidal/Euler integration is preferred over Runge-Kutta for noisy IMU raw_input_data
     with irregular timestamps.
 
-    Returns roll, pitch, yaw (rad) and quaternion history.
+    Returns:
+        roll, pitch, yaw : Euler angles (rad)
+        q                : quaternion history (body → inertial)
     """
 
     num_pts = len(time_t)
@@ -127,24 +214,23 @@ def estimate_attitude_trapezoidal(
         axi, ayi, azi = ax[i], ay[i], az[i]
         gri, gpi, gyi = gr[i], gp[i], gy[i]
 
+        # Normalize accelerometer (gravity direction only)
         norm = np.sqrt(axi ** 2 + ayi ** 2 + azi ** 2)
         if norm > 0.0:
-            axi, ayi, azi = axi / norm, ayi / norm, azi / norm
+            axi /= norm
+            ayi /= norm
+            azi /= norm
 
-        vx = 2.0 * (q[i, 1] * q[i, 3] - q[i, 0] * q[i, 2])
-        vy = 2.0 * (q[i, 0] * q[i, 1] + q[i, 2] * q[i, 3])
-        vz = q[i, 0] ** 2 - 0.5 + q[i, 3] ** 2
+        # Gravity alignment error
+        ex, ey, ez = compute_gravity_error(q[i], axi, ayi, azi)
 
-        ex = ayi * vz - azi * vy
-        ey = azi * vx - axi * vz
-        ez = axi * vy - ayi * vx
-
+        # Proportional feedback (Mahony correction)
         gri += twokp * ex
         gpi += twokp * ey
         gyi += twokp * ez
 
+        # Quaternion kinematics
         dt = time_t[i + 1] - time_t[i]
-
         dq = 0.5 * np.array([
             -q[i, 1] * gri - q[i, 2] * gpi - q[i, 3] * gyi,
             q[i, 0] * gri + q[i, 2] * gyi - q[i, 3] * gpi,
@@ -152,9 +238,11 @@ def estimate_attitude_trapezoidal(
             q[i, 0] * gyi + q[i, 1] * gpi - q[i, 2] * gri
         ], dtype=np.float64)
 
+        # Trapezoidal / Euler integration step
         q[i + 1] = q[i] + dq * dt
         q[i + 1] /= np.linalg.norm(q[i + 1])
 
+    # Convert quaternion history to Euler angles
     roll = np.arctan2(
         2 * (q[:, 0] * q[:, 1] + q[:, 2] * q[:, 3]),
         1 - 2 * (q[:, 1] ** 2 + q[:, 2] ** 2)
@@ -170,6 +258,136 @@ def estimate_attitude_trapezoidal(
     )
 
     return roll, pitch, yaw, q
+
+
+def body_to_inertial_acceleration(time_t, ax_b, ay_b, az_b, q):
+    """
+    Transform body-frame accelerometer measurements into inertial-frame
+    accelerations using quaternions, with gravity removed.
+
+    :params time_t  : timestamp
+    :params ax_b    : body accelerometer position(m/s^2), bias-corrected
+    :params ay_b    : body accelerometer orientation(m/s^2), bias-corrected
+    :params az_b    : body accelerometer orientation(m/s^2), bias-corrected
+    :params q       : quaternion BODY → INERTIAL
+    :return ax_b    : body accelerometer x, with gravity removed (m/s^2)
+    :return ay_b    : body accelerometer y, with gravity removed (m/s^2)
+    :return az_b     : bodyaccelerometer z, with gravity removed (m/s^2)
+    """
+
+    num_pts = len(time_t)
+    ax_inertial = np.zeros(num_pts)
+    ay_inertial = np.zeros(num_pts)
+    az_inertial = np.zeros(num_pts)
+
+    for i in range(num_pts):
+        a_body = np.array([ax_b[i], ay_b[i], az_b[i]])
+
+        a_inertial_quaternion = quaternion_rotate(q[i], a_body)
+        ax_inertial[i], ay_inertial[i], az_inertial[i] = a_inertial_quaternion
+
+    return ax_inertial, ay_inertial, az_inertial
+
+
+def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=None):
+    """
+    Integrate inertial accelerations to get velocity and position with linear drift compensation.
+
+    :param time_t: timestamps (numpy array)
+    :param ax_inertial: inertial x-acceleration (m/s^2)
+    :param ay_inertial: inertial y-acceleration (m/s^2)
+    :param az_inertial: inertial z-acceleration (m/s^2)
+    :param tland: optional: flight end time (seconds) to clip positions after landing
+    :return:
+        vx_c, vy_c, vz_c : drift-compensated velocities
+        px_f, py_f, pz_f : positions (meters)
+    """
+    num_pts = len(time_t)
+
+    # --- Step 1: Integrate acceleration to velocity ---
+    vx = np.zeros(num_pts, dtype=np.float64)
+    vy = np.zeros(num_pts, dtype=np.float64)
+    vz = np.zeros(num_pts, dtype=np.float64)
+
+    for i in range(1, num_pts):
+        dt = time_t[i] - time_t[i - 1]
+        vx[i] = vx[i - 1] + 0.5 * (ax_inertial[i] + ax_inertial[i - 1]) * dt
+        vy[i] = vy[i - 1] + 0.5 * (ay_inertial[i] + ay_inertial[i - 1]) * dt
+        vz[i] = vz[i - 1] + 0.5 * (az_inertial[i] + az_inertial[i - 1]) * dt
+
+    # --- Step 2: Drift compensation (linear) ---
+    t_rel = time_t - time_t[0]
+    total_t = time_t[-1] - time_t[0]
+    vx_c = vx - (vx[-1] * t_rel / total_t)
+    vy_c = vy - (vy[-1] * t_rel / total_t)
+    vz_c = vz - (vz[-1] * t_rel / total_t)
+
+    # --- Step 3: Integrate velocity to position ---
+    px_f = np.zeros(num_pts, dtype=np.float64)
+    py_f = np.zeros(num_pts, dtype=np.float64)
+    pz_f = np.zeros(num_pts, dtype=np.float64)
+
+    for i in range(1, num_pts):
+        dt = time_t[i] - time_t[i - 1]
+        if tland is None or time_t[i] < tland:
+            px_f[i] = px_f[i - 1] + 0.5 * (vx_c[i] + vx_c[i - 1]) * dt
+            py_f[i] = py_f[i - 1] + 0.5 * (vy_c[i] + vy_c[i - 1]) * dt
+            pz_f[i] = pz_f[i - 1] + 0.5 * (vz_c[i] + vz_c[i - 1]) * dt
+        else:
+            px_f[i], py_f[i], pz_f[i] = px_f[i - 1], py_f[i - 1], pz_f[i - 1]
+
+    return vx_c, vy_c, vz_c, px_f, py_f, pz_f
+
+
+def correct_for_cog(ax, ay, az, gr, gp, gy, rx=0.0, ry=0.0, rz=0.0, dt=0.01):
+    """
+    Translate body-frame accelerations to center of gravity.
+    :param ax: x-acceleration (m/s^2)
+    :param ay: y-acceleration (m/s^2)
+    :param az: z-acceleration (m/s^2)
+    :param gr: roll gravity (m/s^2)
+    :param gp: pitch gravity (m/s^2)
+    :param gy: yaw y-acceleration (m/s^2)
+    :param rx: roll x-acceleration (m/s^2)
+    :param ry: yaw x-acceleration (m/s^2)
+    :param rz: roll z-acceleration (m/s^2)
+    :param dt:
+
+    :return: ax_cg
+    : ay_cg
+    : az_cg
+    """
+    gr_dot, gp_dot, gy_dot = np.gradient(gr, dt), np.gradient(gp, dt), np.gradient(gy, dt)
+
+    ax_cg = ax - (-(gp ** 2 + gy ** 2) * rx + (gr * gp - gy_dot) * ry + (gr * gy + gp_dot) * rz)
+    ay_cg = ay - ((gr * gp + gy_dot) * rx - (gr ** 2 + gy ** 2) * ry + (gp * gy - gr_dot) * rz)
+    az_cg = az - ((gr * gy - gp_dot) * rx + (gp * gy + gr_dot) * ry - (gr ** 2 + gp ** 2) * rz)
+
+    return ax_cg, ay_cg, az_cg
+
+
+def remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch):
+    """
+    Remove accelerometer and gyro biases using pre-launch window.
+    """
+    pre_launch_mask = (time_t < tlaunch)
+    if np.any(pre_launch_mask):
+        ax_bias, ay_bias = np.mean(ax[pre_launch_mask]), np.mean(ay[pre_launch_mask])
+        gr_bias, gp_bias, gy_bias = np.mean(gr[pre_launch_mask]), np.mean(gp[pre_launch_mask]), np.mean(
+            gy[pre_launch_mask])
+
+        ax_final = ax - ax_bias
+        ay_final = ay - ay_bias
+        az_final = az
+
+        gr_final = gr - gr_bias
+        gp_final = gp - gp_bias
+        gy_final = gy - gy_bias
+    else:
+        ax_final, ay_final, az_final = ax, ay, az
+        gr_final, gp_final, gy_final = gr, gp, gy
+
+    return ax_final, ay_final, az_final, gr_final, gp_final, gy_final
 
 
 # POWER SPECTRAL DENSITY
@@ -279,7 +497,7 @@ plt.show()
 
 # Hand-adjusted launch/land times
 tlaunch = 874.6
-tland = 882.9
+tland = 889.5
 # # TODO REMOVE THIS analysis for entire duration
 # tland = 919
 
@@ -324,7 +542,7 @@ plt.plot(time_t, ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase
 plt.title("Step 3: Filter Phase-Lag Comparison")
 plt.ylabel("m/s^2")
 plt.legend()
-add_2d_plot_note("IIR lags, only forward looking, use Butterworh filter", x=0.55)
+add_2d_plot_note("IIR lags, only forward looking, use Butterworh filter", x=0.40)
 plt.savefig(f"{plot_directory}/iir-butterworth-plot.pdf")
 plt.show()
 
@@ -345,43 +563,29 @@ gr_f, gp_f, gy_f = gr_t, gp_t, gy_t
 # --- 4. Sensor vs Center of Gravity TRANSLATION & BIAS REMOVAL ---
 rx, ry, rz = 0.0, 0.0, 0.0
 dt = dt_avg
-gr_dot, gp_dot, gy_dot = np.gradient(gr_f, dt), np.gradient(gp_f, dt), np.gradient(gy_f, dt)
 
-ax_cg = ax_f - (-(gp_f ** 2 + gy_f ** 2) * rx + (gr_f * gp_f - gy_dot) * ry + (gr_f * gy_f + gp_dot) * rz)
-ay_cg = ay_f - ((gr_f * gp_f + gy_dot) * rx - (gr_f ** 2 + gy_f ** 2) * ry + (gp_f * gy_f - gr_dot) * rz)
-az_cg = az_f - ((gr_f * gy_f - gp_dot) * rx + (gp_f * gy_f + gr_dot) * ry - (gr_f ** 2 + gp_f ** 2) * rz)
-
-pre_launch_mask = (time_t < tlaunch)
-if np.any(pre_launch_mask):
-    ax_bias, ay_bias = np.mean(ax_cg[pre_launch_mask]), np.mean(ay_cg[pre_launch_mask])
-    gr_b, gp_b, gy_b = np.mean(gr_f[pre_launch_mask]), np.mean(gp_f[pre_launch_mask]), np.mean(gy_f[pre_launch_mask])
-
-    ax_final, ay_final, az_final = ax_cg - ax_bias, ay_cg - ay_bias, az_cg
-    gr_final, gp_final, gy_final = gr_f - gr_b, gp_f - gp_b, gy_f - gy_b
-else:
-    ax_final, ay_final, az_final = ax_cg, ay_cg, az_cg
-    gr_final, gp_final, gy_final = gr_f, gp_f, gy_f
+ax_cg, ay_cg, az_cg = correct_for_cog(ax_f, ay_f, az_f, gr_f, gp_f, gy_f, rx, ry, rz, dt)
+ax_final, ay_final, az_final, gr_final, gp_final, gy_final = remove_static_bias(
+    ax_cg, ay_cg, az_cg, gr_f, gp_f, gy_f, time_t, tlaunch
+)
 
 plt.figure(figsize=(10, 4))
 plt.plot(time_t, ax_f, label="Raw Filtered Ax", alpha=0.5)
 plt.plot(time_t, ax_final, label="Bias Corrected Ax", color="blue")
-plt.xlim(tlaunch - 0.8, tlaunch + 0.2)
-plt.title("Step 4: Static Bias Correction (Pre-Launch Window) Center Gravity & Bias Correction")
+plt.xlim(tlaunch - 0.8, tlaunch + 0.3)
+plt.ylim(-0.5, 2.0)
+plt.title("Step 4: post-flight Attempt at Static Bias Correction- Center Gravity & Bias Correction")
 plt.legend()
 plt.grid(True)
-add_2d_plot_note("orig IMU raw_input_data should zero bias")
+add_2d_plot_note("orig IMU raw_input_data should zero bias, launch at 874.64", x=0.35)
 plt.savefig(f"{plot_directory}/imu-bias-plot.pdf")
 plt.show()
 
 # --- 5. ATTITUDE ESTIMATION - Trapezoidal Integration---
 # Trapezoidal better tha Runge-Kutta in this use case
 
-roll, pitch, yaw, q = estimate_attitude_trapezoidal(
-    time_t,
-    ax_final, ay_final, az_final,
-    gr_final, gp_final, gy_final,
-    twokp=1.0
-)
+roll, pitch, yaw, q = estimate_attitude_mahony_trapezoidal(
+    time_t, ax_final, ay_final, az_final, gr_final, gp_final, gy_final, twokp=1.0)
 
 plt.figure(figsize=(10, 4))
 plt.plot(time_t, np.degrees(pitch), label="Pitch (Degrees)", color="orange")
@@ -390,28 +594,13 @@ plt.title("Step 5: Attitude Estimation (Euler Angles)")
 plt.ylabel("Degrees")
 plt.legend()
 plt.grid(True)
-add_2d_plot_note("pitch & roll more as go higher, gimbal flip is discontinuity", x=0.1)
+add_2d_plot_note("pitch & roll more as go higher, gimbal flip is discontinuity", x=0.085)
 plt.savefig(f"{plot_directory}/roll-pitch-plot.pdf")
 plt.show()
 
 # --- 6. INERTIAL TRANSFORM ---
-num_pts = len(time_t)
-ax_I, ay_I, az_I = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts,
-                                                                                                      dtype=np.float64)
-for i in range(num_pts):
-    cp, sp, ct, st, cs, ss = np.cos(roll[i]), np.sin(roll[i]), np.cos(pitch[i]), np.sin(pitch[i]), np.cos(
-        yaw[i]), np.sin(yaw[i])
-    TIB = np.array([
-        [ct * cs, sp * st * cs - cp * ss, cp * st * cs + sp * ss],
-        [ct * ss, sp * st * ss + cp * cs, cp * st * ss - sp * cs],
-        [-st, sp * ct, cp * ct]
-    ], dtype=np.float64)
-    ax_I[i], ay_I[i], az_I[i] = TIB @ np.array([ax_final[i], ay_final[i], az_final[i]], dtype=np.float64)
-
-if np.any(pre_launch_mask):
-    ax_I -= np.mean(ax_I[pre_launch_mask])
-    ay_I -= np.mean(ay_I[pre_launch_mask])
-    az_I -= np.mean(az_I[pre_launch_mask])
+# Inertial transform with Gravity removed
+ax_I, ay_I, az_I = body_to_inertial_acceleration(time_t, ax_final, ay_final, az_final, q)
 
 plt.figure(figsize=(10, 4))
 plt.plot(time_t, ax_I, label="Ax_Inertial")
@@ -421,52 +610,28 @@ plt.title("Step 6: Inertial Acceleration (Gravity Subtracted)")
 plt.ylabel("m/s^2")
 plt.legend()
 plt.grid(True)
-add_2d_plot_note("Strange: Ay_I goe neg, offset by Ax_I?", x=0.02)
+add_2d_plot_note("Ay_I neg and Ax_I, positive during thrust, likely cross-axis artifact of miscalibration", x=0.02)
 plt.savefig(f"{plot_directory}/inertial-acceleration-plot.pdf")
 plt.show()
 
 # --- 7. INTEGRATION & DRIFT COMPENSATION ---
-vx, vy, vz = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts,
-                                                                                                dtype=np.float64)
-px, py, pz = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts,
-                                                                                                dtype=np.float64)
 
-for i in range(1, num_pts):
-    dt_step = time_t[i] - time_t[i - 1]
-    vx[i] = vx[i - 1] + 0.5 * (ax_I[i] + ax_I[i - 1]) * dt_step
-    vy[i] = vy[i - 1] + 0.5 * (ay_I[i] + ay_I[i - 1]) * dt_step
-    vz[i] = vz[i - 1] + 0.5 * (az_I[i] + az_I[i - 1]) * dt_step
-    px[i] = px[i - 1] + 0.5 * (vx[i] + vx[i - 1]) * dt_step
-    py[i] = py[i - 1] + 0.5 * (vy[i] + vy[i - 1]) * dt_step
-    pz[i] = pz[i - 1] + 0.5 * (vz[i] + vz[i - 1]) * dt_step
-
-t_rel = time_t - time_t[0]
-total_t = time_t[-1] - time_t[0]
-vx_c, vy_c, vz_c = vx - (vx[-1] * (t_rel / total_t)), vy - (vy[-1] * (t_rel / total_t)), vz - (
-        vz[-1] * (t_rel / total_t))
-
-px_f, py_f, pz_f = np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts, dtype=np.float64), np.zeros(num_pts,
-                                                                                                      dtype=np.float64)
-for i in range(1, num_pts):
-    dt_step = time_t[i] - time_t[i - 1]
-    if time_t[i] < tland:
-        px_f[i] = px_f[i - 1] + vx_c[i] * dt_step
-        py_f[i] = py_f[i - 1] + vy_c[i] * dt_step
-        pz_f[i] = pz_f[i - 1] + vz_c[i] * dt_step
-    else:
-        px_f[i], py_f[i], pz_f[i] = px_f[i - 1], py_f[i - 1], pz_f[i - 1]
+# Double Integrate: 1st: create velocities from acceleration,  2nd: create positions from velocities
+# vx_c = corrected
+vx_c, vy_c, vz_c, px_f, py_f, pz_f = integrate_acceleration(time_t, ax_I, ay_I, az_I, tland=tland)
 
 # --- 8. FINAL VISUALIZATIONS ---
 # Clipping Check
 plt.figure(figsize=(10, 4))
 plt.plot(time_t, ax_t, alpha=0.3, label="Raw Ax")
 plt.plot(time_t, ax_f, color="blue", label="Filtered Ax")
-plt.xlim(tlaunch - 0.5, tlaunch + 4.0)
+plt.xlim(tlaunch - 0.5, tlaunch + 6.0)
+plt.ylim(-.2, 3.0)
 plt.title("Step 8: Sensor Health Check (Thrust Phase Clipping)")
 plt.ylabel("m/s^2")
 plt.legend()
 plt.grid(True)
-add_2d_plot_note("We know massive clip at launch, looks minimized here", x=0.1)
+add_2d_plot_note("We know massive clip at launch, looks minimized here", x=0.03)
 plt.savefig(f"{plot_directory}/acceleration-clipping-plot.pdf")
 plt.show()
 
@@ -516,4 +681,4 @@ plt.savefig(f"{plot_directory}/flight-path.pdf")
 plt.show()
 
 # animation of projectile in vpython using this raw_input_data
-animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f)
+animate_projectile(time_t, px_f, py_f, pz_f, vz_c, q, ax_f)
