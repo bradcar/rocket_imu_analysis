@@ -366,7 +366,7 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=
     return vx_c, vy_c, vz_c, px_f, py_f, pz_f
 
 
-def correct_for_cog(ax, ay, az, gr, gp, gy, dt=0.0025, r_offset=0.102):
+def correct_for_cog(ax, ay, az, gr, gp, gy, dt=0.0025, sensor_offset_from_cg=0.102):
     """
     Translate body-frame accelerations to center of gravity.
     :param ax: x-acceleration (m/s^2)
@@ -376,7 +376,7 @@ def correct_for_cog(ax, ay, az, gr, gp, gy, dt=0.0025, r_offset=0.102):
     :param gp: pitch gravity (m/s^2)
     :param gy: yaw y-acceleration (m/s^2)
     :param dt:
-    :param r_offset:
+    :param sensor_offset_from_cg:
 
     :return: ax_cg
     : ay_cg
@@ -388,14 +388,19 @@ def correct_for_cog(ax, ay, az, gr, gp, gy, dt=0.0025, r_offset=0.102):
     gy_dot = np.gradient(gy, dt)
 
     # Estimate rotational acceleration error along each axis
-    ax_err = r_offset * (gr_dot + gr ** 2)
-    ay_err = r_offset * (gp_dot + gp ** 2)
-    az_err = r_offset * (gy_dot + gy ** 2)
+    ax_err = sensor_offset_from_cg * (gr_dot + gr ** 2)
+    ay_err = sensor_offset_from_cg * (gp_dot + gp ** 2)
+    az_err = sensor_offset_from_cg * (gy_dot + gy ** 2)
 
     # Correct accelerations by subtracting estimated rotational contribution
     ax_cg = ax - ax_err
     ay_cg = ay - ay_err
     az_cg = az - az_err
+
+    # Error due to sensor & CG offset, at each point in time
+    # for i in range(len(ax_cg)):
+    #     err = np.sqrt(ax_err[i] ** 2 + ay_err[i] ** 2 + az_err[i] ** 2)
+    #     print(f"{i=}, error: {err=}, {(err/9.81)*100:.0f}%")
 
     # Max error magnitude for reference
     a_error_mag = np.sqrt(ax_err ** 2 + ay_err ** 2 + az_err ** 2)
