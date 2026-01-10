@@ -590,7 +590,30 @@ plt.show()
 # --- 3b. Analyze PSD ---
 
 ax_freq, ax_psd = get_psd(ax_b, fs=sample_frequency, nperseg=1024)
-plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+# plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+
+plt.figure(figsize=(8, 4))
+plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
+plt.xlabel("Frequency (Hz)")
+plt.ylabel("PSD (m²/s⁴/Hz)")
+plt.title("PSD of Ax_b (whole input raw_input_data)")
+plt.grid(True, which="both")
+plt.tight_layout()
+plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
+plt.show()
+
+plt.figure(figsize=(8, 4))
+plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
+plt.xlabel("Frequency (Hz)")
+plt.ylabel("PSD (m²/s⁴/Hz)")
+plt.grid(True, which="both")
+plt.tight_layout()
+plt.title("Zoomed PSD of Ax_b (whole input raw_input_data)")
+plt.xlim(0.2, 2.0)
+plt.ylim(0.1, 100.0)
+plt.savefig(f"{plot_directory}/zoomed-psd-plot.pdf")
+plt.show()
+
 print(f"{len(ax_b)=}, {len(ax_psd)=}")
 
 ax_f_freq, ax_f_psd = get_psd(ax_f, fs=sample_frequency, nperseg=1024)
