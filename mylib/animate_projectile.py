@@ -35,8 +35,9 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     # Set scene
     scene.title = "Rocket Launch Simulation - Note: slow flip starts at end of thrust burn, unstable rocket"
 
-    # light gray
+    # light gray sky
     scene.background = vector(0.8, 0.8, 0.8)
+    scene.background = vector(0.82, 0.87, 0.94)
 
     # pixels
     scene.width = 800
@@ -68,9 +69,9 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
 
     # Rocket Arrows
     arrow_scale = 25
-    arrow_body_x = arrow(pos=rocket.pos, axis=arrow_scale * world_x, shaftwidth=1.5, color=color.red)
-    arrow_body_y = arrow(pos=rocket.pos, axis=arrow_scale * world_y, shaftwidth=1.5, color=color.green)
-    arrow_body_z = arrow(pos=rocket.pos, axis=arrow_scale * world_z, shaftwidth=1.5, color=color.blue)
+    arrow_body_x = arrow(pos=rocket.pos, axis=arrow_scale * world_x, shaftwidth=3.0, color=color.red)
+    arrow_body_y = arrow(pos=rocket.pos, axis=arrow_scale * world_y, shaftwidth=3.0, color=color.green)
+    arrow_body_z = arrow(pos=rocket.pos, axis=arrow_scale * world_z, shaftwidth=3.0, color=color.blue)
 
     # Numerical simulation quantity display of Altitude, timestamp, and velocity
     data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
@@ -89,7 +90,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         # Relative quaternion from initial orientation
         q_rel = quaternion_multiply(quaternion_conjugate(q[0]), q[i])
 
-        # --- Rotate world axes to body axes using NumPy ---
+        # Rotate world axes to body axes
         body_x_np = quaternion_rotate(q_rel, np.array([1.0, 0.0, 0.0]))
         body_y_np = quaternion_rotate(q_rel, np.array([0.0, 1.0, 0.0]))
         body_z_np = quaternion_rotate(q_rel, np.array([0.0, 0.0, 1.0]))
@@ -109,7 +110,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         arrow_body_y.axis = arrow_scale * body_y.norm()
         arrow_body_z.axis = arrow_scale * body_z.norm()
 
-        # --- Numerical display ---
+        # On video, display Altitude, Time, and Velocity
         flight_time = time_t[i] - time_t[0]
         data_label.text = (
             f"Alt={pz_f[i]:.1f} m\n"
@@ -117,7 +118,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
             f"v={vz[i]:.1f} m/s"
         )
 
-        # Angular velocity in world frame (deg/s)
+        # Calc Angular velocity in degrees
         rad2deg = 180.0 / np.pi
         if i > 0:
             dt = time_t[i] - time_t[i - 1]
@@ -128,6 +129,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         else:
             wx, wy, wz = 0.0, 0.0, 0.0
 
+        # On video, display Angular velocity (deg/s)
         omega_label.text = (
             "deg/s (world)\n"
             f"x° = {wx:.0f}°/s\n"
@@ -135,7 +137,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
             f"z° = {wz:.0f}°/s"
         )
 
-        # Trail effect: red during thrust, yellow during coasting
+        # Trail effect: red/thick during thrust, yellow/thin during coast
         if flight_time < 4 and ax_f[i] > 0.5:
             rocket.trail_color = color.red
             rocket.trail_radius = 2.0
