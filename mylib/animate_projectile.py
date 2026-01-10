@@ -33,7 +33,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     scene.capture("frame.png")
 
     # Set scene
-    scene.title = "Rocket Launch Simulation - Note slow flip starts at end of thrust burn"
+    scene.title = "Rocket Launch Simulation - Note: slow flip starts at end of thrust burn, unstable rocket"
 
     # light gray
     scene.background = vector(0.8, 0.8, 0.8)
@@ -114,7 +114,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         data_label.text = (
             f"Alt={pz_f[i]:.1f} m\n"
             f"t={flight_time:.1f} s\n"
-            f"v={vz[i] + G_EARTH:.1f} m/s"
+            f"v={vz[i]:.1f} m/s"
         )
 
         # Angular velocity in world frame (deg/s)
