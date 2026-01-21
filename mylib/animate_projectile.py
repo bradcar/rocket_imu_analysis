@@ -113,9 +113,9 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         # On video, display Altitude, Time, and Velocity
         flight_time = time_t[i] - time_t[0]
         data_label.text = (
-            f"Alt={pz_f[i]:.1f} m\n"
-            f"t={flight_time:.1f} s\n"
-            f"v={vz[i]:.1f} m/s"
+            f"Alt = {pz_f[i]:.1f} m\n"
+            f"t = {flight_time:.1f} s\n"
+            f"v = {vz[i]:.1f} m/s"
         )
 
         # Calc Angular velocity in degrees
