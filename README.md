@@ -51,15 +51,15 @@ Calculated Flight Data:
 
 t = 3.0 sec after launch right before thrust phase ends.
 
-<img src="imgs/frame_0013.png" width="400"/>
+<img src="imgs/frame_0013.png" width="600"/>
 
 t = 6.3 sec, in coast phase the rocket starts to tumble at apogee it is nose down.
 
-<img src="imgs/frame_0027.png" width="400"/>
+<img src="imgs/frame_0027.png" width="600"/>
 
 t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy explosion, the sensor seems to head higher.
 
-<img src="imgs/frame_0071.png" width="400"/>
+<img src="imgs/frame_0071.png" width="600"/>
 
 ## Video Output
 
