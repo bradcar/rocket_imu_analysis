@@ -35,17 +35,22 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     # Set scene
     scene.title = "Rocket Launch Simulation - Note: slow flip starts at end of thrust burn, unstable rocket"
 
-    # light gray sky
-    scene.background = vector(0.8, 0.8, 0.8)
+    # light blue sky
+    # scene.background = vector(0.8, 0.8, 0.8) # light gray
     scene.background = vector(0.82, 0.87, 0.94)
 
     # pixels
-    scene.width = 800
-    scene.height = 600
+    scene.width = 1600
+    scene.height = 1200
+
+    # Disable automatic camera movement
+    scene.autoscale = False  # STOP VPython from trying to "fit" everything
+    scene.userzoom = False  # Prevents accidental scroll-zooming
+    scene.userspin = True  # Allows you to rotate, but won't move automatically
 
     # Camera settings
     scene.camera.pos = vector(-265, -290, 47)
-    scene.camera.axis = vector(265, 290, 95)
+    scene.camera.axis = vector(265, 290, 130)
     scene.up = vector(0, 0, 1)
 
     # World Reference orintation
@@ -56,12 +61,12 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     # Ground plane
     ground = box(pos=vector(0, 0, 0), size=vector(200, 200, 1), color=color.green, opacity=0.5)
 
-    # World axes for reference
+    # World axes for reference, use darker green for label
     x_axis = arrow(pos=vector(0, 0, 0), axis=vector(50, 0, 0), shaftwidth=0.8, color=color.red)
-    y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=0.8, color=color.green)
+    y_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 50, 0), shaftwidth=0.8, color=vector(0, 0.5, 0))
     z_axis = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 50), shaftwidth=0.8, color=color.blue)
-    label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=12)
-    label(pos=y_axis.pos + y_axis.axis, text="Y", color=color.green, box=False, height=12)
+    label(pos=x_axis.pos + x_axis.axis, text="X", color=color.red, box=False, height=20)
+    label(pos=y_axis.pos + y_axis.axis, text="Y", color=vector(0, 0.5, 0), box=False, height=20)
 
     # Rocket body
     rocket = sphere(pos=vector(px_f[0], py_f[0], pz_f[0]), radius=3, color=color.blue, make_trail=True,
@@ -75,10 +80,10 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
 
     # Numerical simulation quantity display of Altitude, timestamp, and velocity
     data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
-                       opacity=1.0, height=12)
+                       opacity=1.0, height=24)
     omega_label = label(pos=vector(-50, 100, 25), text="", color=color.black, box=True,
                         background=vector(0.9, 0.9, 0.9),
-                        opacity=1.0, height=12)
+                        opacity=1.0, height=24)
 
     # --- Animation loop ---
     for i in range(len(px_f)):

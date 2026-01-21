@@ -5,7 +5,7 @@ Analysis of Quaterniion, Accelerometerm & Gyrometer Fused 9 DOF data pipeline an
 Analysis of Accelerometer & Gyrometer 6 DOF data pipeline analysis. 
 For 6 DOF, we have to estimate quaternions and remove gravity from acceleration data.
 
-## Use case:
+## Running Analysis and Animation:
 
 Either use run function in PyCharm or...
 
@@ -47,13 +47,29 @@ Calculated Flight Data:
 	Max velocity: 59.3 m/s
 	Max acceleration: 39.2 m/s^2, 4.0 g
 ```
-Rocket IMU Data issues Issues (Carlos Montalvo):
-- there is massive clipping of accelerometer at launch
-- low ~250ms sampling rate
-- Gyro shows lots of tumbling after chute deploy gimbal lock issues, should use quaternions.
-- Gyro data makes post-apogee analysis tricky
+## Images from Video
 
-## Credits = Many Thanks!:
+t = 3.0 sec after launch right before thrust phase ends.
+
+<img src="imgs/frame_0013.png" width="400"/>
+
+t = 6.3 sec, in coast phase the rocket starts to tumble at apogee it is nose down.
+
+<img src="imgs/frame_0027.png" width="400"/>
+
+t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy explosion, the sensor seems to head higher.
+
+<img src="imgs/frame_0071.png" width="400"/>
+
+## Video Output
+
+Rocket IMU Data issues Issues:
+- there is massive clipping of accelerometer at launch, likely altitude and velocity wrong
+- low ~250ms sampling rate
+- Gyro shows lots of tumbling after chute deploy
+- Sensor data wonky post-apogee, accurate analysis after this is difficult
+
+## Credits - Many Thanks!
  THANKS to Carlos Montalvo! You have an awesome video and GitHub repo!
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
 https://www.youtube.com/watch?v=mb1RNYKtWQE
