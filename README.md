@@ -7,9 +7,7 @@ For 6 DOF, we have to estimate quaternions and remove gravity from acceleration 
 
 ## Running Analysis and Animation:
 
-Either use run function in PyCharm or...
-
-Run python to creates plots in ./plots and frames in ~/Downloads:
+Either use run function in PyCharm or run python to creates plots in ./plots and frames in ~/Downloads:
 
     $ python3 analysis.py
 
@@ -17,7 +15,7 @@ Run script to create video in ./video from ~/Downloads/frame_0000.png to ~/Downl
     
     $ ./video-create.sh
 
-## Original Rocket program output (Carlos Montalvo's flight data):
+## Original Rocket Flight Analysis:
 
 We used Carlos Montalvo's flight data and original code to create this code. 
 In addition, we created a VPython code to animate the flight data. This animation also shows the flight path trail.
@@ -63,15 +61,19 @@ t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy e
 
 ## Video Output
 
+Video created using VPython to animate the flight data:
+
 https://github.com/user-attachments/assets/0738fe81-0436-4e07-a915-c6b6682752a6
 
-Rocket IMU Data issues:
-- There was significant clipping of accelerometer at launch, likely altitude and velocity wrong
-- The sampling rate is low at average of ~250 msec
-- Gyro shows lots of tumbling after chute explosion deploy, it seems to have pushed the sensor hight !?
-- Sensor data is a bit wonky post-apogee, accurate analysis after this is difficult
+Rocket IMU data notes:
+- There was significant clipping of accelerometer results during launch andlikely altitude and velocity are wrong.
+- The average 264 msec sampling rate is slow for this application,
+- There is an "acceleration event" at t=9.6s after launch (883s) and at (888s). We are not sure what these are. Likely one of these is chute deploy.
+- Sensor data is a bit wonky post-apogee, accurate analysis after time this is confusing.
+- 
 
 ## Credits - Many Thanks!
-THANKS to Monte Carlos! You have an awesome video and GitHub repo!
+THANKS to Carlos Montalvo! You have an awesome video and GitHub repo!
+
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
 https://www.youtube.com/watch?v=mb1RNYKtWQE

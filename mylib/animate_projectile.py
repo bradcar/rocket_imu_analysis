@@ -143,7 +143,8 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         )
 
         # Trail effect: red/thick during thrust, yellow/thin during coast
-        if flight_time < 4 and ax_f[i] > 0.5:
+        if ax_f[i] > 0.5:
+        #if flight_time < 4 and ax_f[i] > 0.5:
             rocket.trail_color = color.red
             rocket.trail_radius = 2.0
         else:

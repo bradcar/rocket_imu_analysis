@@ -74,7 +74,8 @@ Sensor Correction:
 BNO086 Fused Sensor Simplification:
 =============================
     The BNO086 already provides fused quaternions (body → inertial) and
-    linear acceleration (gravity subtracted).
+    linear acceleration (gravity subtracted). Our bno08x library will also capture data at 5ms periods (200 Hz)
+    and report the actual sample intervals to 0.1ms accuracy which should improve the double integration errors.
 
     OUPUT NEEDED: 22 bytes per sample
      - timestamp - 2 bytes
