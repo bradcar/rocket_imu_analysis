@@ -63,7 +63,8 @@ t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy e
 
 ## Video Output
 
-<video src="video/rocket-trajectory-poc.mp4" controls muted autoplay loop style="max-width: 100%;"></video>
+
+https://github.com/user-attachments/assets/0738fe81-0436-4e07-a915-c6b6682752a6
 
 Rocket IMU Data issues Issues:
 - there is massive clipping of accelerometer at launch, likely altitude and velocity wrong
@@ -73,5 +74,9 @@ Rocket IMU Data issues Issues:
 
 ## Credits - Many Thanks!
  THANKS to Carlos Montalvo! You have an awesome video and GitHub repo!
+
+
+
+
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
 https://www.youtube.com/watch?v=mb1RNYKtWQE
