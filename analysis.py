@@ -77,17 +77,17 @@ BNO086 Fused Sensor Simplification:
     linear acceleration (gravity subtracted). Our bno08x library will also capture data at 5ms periods (200 Hz)
     and report the actual sample intervals to 0.1ms accuracy which should improve the double integration errors.
 
-    OUPUT NEEDED: 22 bytes per sample
-     - timestamp - 2 bytes
-     - quaternion - 8 bytes
-     - linear_acceleration - 6 bytes
-     - gyroscope - 6 bytes
+    SENSOR OUTPUT NEEDED: 44 bytes per sample
+     - timestamp - 4-byte float
+     - linear_acceleration - 3 * 4-byte float
+     - quaternion - 4 * 4-byte float
+     - gyroscope - 3 * 4-byte float
      estimate total of 80K at 10 KiB/s
      - 76,800 bytes of data in 8 sec = transfer of about 10k/sec
-     - 400 Hz * 24 bytes * 8 second (6 to 6.5 sec apogee + > 1 to 1.5 sec post burst)
+     - 400 Hz * 44 bytes * 8 second (6 to 6.5 sec apogee + > 1 to 1.5 sec post burst)
 
-    No need for:
-    - Mahony or complementary filter integration
+    With BNO086 fused data, there is no need for:
+    - Mahony filter integration
     - Manual gravity removal
     - Bias removal is mostly done with BNO086 & calibration
     Optional: may use a mild low-pass filter (10–50 Hz cutoff), test with PSD graph
@@ -101,7 +101,7 @@ BNO086 Fused Sensor Simplification:
     Double Integration:
     - Need to double integrate: linear acceleration → velocity → position:
         x, y, z = bno.linear_acceleration   # linear accel with no gravity!
-    - Can skip linear drift compensation
+    - Can skip linear drift compensation?
 
     Simplified pipeline:
     - Read sensor → quaternion + linear_acceleration (no Gravity) + gyroscope
@@ -130,14 +130,13 @@ SOURCE Credit - thanks to Carlos Montalvo!:
 
 import matplotlib.pyplot as plt
 import numpy as np
-from ipywidgets.widgets.trait_types import time_from_json
 
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.animate_projectile import animate_projectile
 from mylib.quaternion_functions import quaternion_rotate
 from mylib.read_prepare_6_dof import read_prepare_6_dof
 
-# from mylib.read_prepare_6dof import read_prepare_9_dof
+# from mylib.read_prepare_9_dof import read_prepare_9_dof
 
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)
@@ -254,7 +253,7 @@ add_2d_plot_note("Ay_I neg and Ax_I, positive during thrust, likely cross-axis a
 plt.savefig(f"{plot_directory}/inertial-acceleration-plot.pdf")
 plt.show()
 
-# --- 2. INTEGRATION of acceleration to create velocity and position
+# --- 2. DOUBLE INTEGRATION of acceleration to create velocity and position
 # Double Integrate:
 #   1st: create velocities from acceleration
 #   2nd: create positions from velocities
