@@ -71,7 +71,7 @@ Sensor Correction:
     remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch)
         → Remove accelerometer and gyro bias using pre-launch window
 
-BNO086 Sensor Simplification:
+BNO086 Fused Sensor Simplification:
 =============================
     The BNO086 already provides fused quaternions (body → inertial) and
     linear acceleration (gravity subtracted).
@@ -89,10 +89,10 @@ BNO086 Sensor Simplification:
     - Mahony or complementary filter integration
     - Manual gravity removal
     - Bias removal is mostly done with BNO086 & calibration
-    Optional: a mild low-pass filter (10–50 Hz cutoff), test with PSD graph
+    Optional: may use a mild low-pass filter (10–50 Hz cutoff), test with PSD graph
 
-    May still need COG correction (depends on rotation rate & distance
-     8" shell: 4" away from CG)
+    Still need COG correction (depends on rotation rate & distance)
+     Will use COG correction on 8" shell: 4" away from CG which is aligned with center-of-rotation
      - with rotation ω = 30 deg/s ≈ 0.52 rad/s
      - r = 0.102 m (4" on an 8" shell)
      - Centripetal acceleration a = ω^2 r = 0.028 m/s² (0.3% of 9.8 m/s²)
@@ -122,7 +122,7 @@ BNO086 Sensor Simplification:
     - Checking sensor calibration (should read ~9.81 m/s² when stationary)
     - Redundant safety check
 
-SOURCE Credit - thanks to Monte Carlos!:
+SOURCE Credit - thanks to Carlos Montalvo!:
     https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
     https://www.youtube.com/watch?v=mb1RNYKtWQE
 """

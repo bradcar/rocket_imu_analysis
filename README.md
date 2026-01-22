@@ -17,9 +17,9 @@ Run script to create video in ./video from ~/Downloads/frame_0000.png to ~/Downl
     
     $ ./video-create.sh
 
-## Original Rocket program output (Monte Carlos' flight data):
+## Original Rocket program output (Carlos Montalvo's flight data):
 
-We used Monte Carlos' flight data and original code to create this code. 
+We used Carlos Montalvo's flight data and original code to create this code. 
 In addition, we created a VPython code to animate the flight data. This animation also shows the flight path trail.
 Based the vertical acceleration data, we show the trail in a thick/red trail during high-acceleration which we assume is thrust.
 The the flight trail is shown as a thin/yellow trail during coasting.
