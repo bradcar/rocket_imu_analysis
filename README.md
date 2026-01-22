@@ -65,13 +65,13 @@ t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy e
 
 https://github.com/user-attachments/assets/0738fe81-0436-4e07-a915-c6b6682752a6
 
-Rocket IMU Data issues Issues:
-- there is massive clipping of accelerometer at launch, likely altitude and velocity wrong
-- low ~250ms sampling rate
-- Gyro shows lots of tumbling after chute deploy
-- Sensor data wonky post-apogee, accurate analysis after this is difficult
+Rocket IMU Data issues:
+- There was significant clipping of accelerometer at launch, likely altitude and velocity wrong
+- The sampling rate is low at average of ~250 msec
+- Gyro shows lots of tumbling after chute explosion deploy, it seems to have pushed the sensor hight !?
+- Sensor data is a bit wonky post-apogee, accurate analysis after this is difficult
 
 ## Credits - Many Thanks!
- THANKS to Monte Carlos! You have an awesome video and GitHub repo!
+THANKS to Monte Carlos! You have an awesome video and GitHub repo!
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
 https://www.youtube.com/watch?v=mb1RNYKtWQE
