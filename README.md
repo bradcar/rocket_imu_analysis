@@ -17,9 +17,9 @@ Run script to create video in ./video from ~/Downloads/frame_0000.png to ~/Downl
     
     $ ./video-create.sh
 
-## Original Rocket program output (Carlos Montalvo's flight data):
+## Original Rocket program output (Monte Carlos' flight data):
 
-We used Carlos Montalvo's flight data and original code to create this code. 
+We used Monte Carlos' flight data and original code to create this code. 
 In addition, we created a VPython code to animate the flight data. This animation also shows the flight path trail.
 Based the vertical acceleration data, we show the trail in a thick/red trail during high-acceleration which we assume is thrust.
 The the flight trail is shown as a thin/yellow trail during coasting.
@@ -72,6 +72,6 @@ Rocket IMU Data issues Issues:
 - Sensor data wonky post-apogee, accurate analysis after this is difficult
 
 ## Credits - Many Thanks!
- THANKS to Carlos Montalvo! You have an awesome video and GitHub repo!
+ THANKS to Monte Carlos! You have an awesome video and GitHub repo!
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
 https://www.youtube.com/watch?v=mb1RNYKtWQE
