@@ -2,32 +2,40 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import mylib.psd_functions as psd
-import mylib.prepare_functions as prep
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.quaternion_functions import quaternion_rotate
 
-# use fp64 thoughout
+# use fp64 prints thoughout
 np.set_printoptions(precision=10)
 
 
-def read_prepare_9_dof(raw_data_file, plot_directory):
+def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     """
-    Reads raw 6DOF IMU data, processes attitude via Mahony filter, performs CoG
-    translation, and transforms accelerations into the inertial frame.
-
+    Reads raw 9 DOF IMU data for spherical shell,
+    performs CoG translation where CoG and center-of-rotation align,
+    and transforms accelerations into the inertial frame.
     """
     # --- A. Load Quaternion, Linear Accelerometer (No Gravity), & Gyro
-    # Using BNO086 22-byte or similar packed format)
+
+    # Using BNO086 22-byte packed format
     data = np.loadtxt(raw_data_file).astype(np.float64)
     time_raw = data[:, 0]
+
+    # TODO IMPORTANT Need to map Quaternion to VPython Quaternion and Gyros !!!!!!!
     # BNO Quaternions: Hamiltonian (r, i, j, k)
     q_raw = data[:, 1:5]
+
     # Linear Accel (Gravity already removed by BNO086 hardware)
     ax_lin, ay_lin, az_lin = data[:, 5], data[:, 6], data[:, 7]
+
     # Gyros (used in CoG correction)
+    # TODO CRITICAL check if:
+    # gr = ωx
+    # gp = ωy
+    # gy = ωz
     gy, gp, gr = data[:, 8], data[:, 9], data[:, 10]
 
-    # --- B. Calculate Time Sampling Averate interval (dt & freq)
+    # --- B. Calculate Time Sampling Average interval (dt & freq)
     deltas = np.diff(time_raw)
     dt_avg = np.mean(deltas)
     dt_min = np.min(deltas)
@@ -52,33 +60,33 @@ def read_prepare_9_dof(raw_data_file, plot_directory):
     # --- C. Launch/Land time Detection based on high acceleration
     t_launch_manual = None
     t_land_manual = None
-    a_mag = np.sqrt(ax_lin ** 2 + ay_lin ** 2 + az_lin ** 2)
-    t_launch = t_launch_manual if t_launch_manual else time_raw[np.where(a_mag > 30.0)[0][0]]
-    t_chute = t_land_manual if t_land_manual else time_raw[-1]  # Simplification
+    acceleration_mag = np.sqrt(ax_lin ** 2 + ay_lin ** 2 + az_lin ** 2)
+    t_launch = t_launch_manual if t_launch_manual else time_raw[np.where(acceleration_mag > 30.0)[0][0]]
+    t_land = t_land_manual if t_land_manual else time_raw[-1]  # Simplification
 
     # 3. TRUNCATION
-    mask = (time_raw > t_launch - 0.5) & (time_raw < t_chute + 0.5)
-    t_f = time_raw[mask]
-    q_f = q_raw[mask]
+    mask = (time_raw > t_launch - 0.5) & (time_raw < t_land + 0.5)
+    time_f = time_raw[mask]
+    quat_f = q_raw[mask]
     ax_b, ay_b, az_b = ax_lin[mask], ay_lin[mask], az_lin[mask]
     gr_f, gp_f, gy_f = gr[mask], gp[mask], gy[mask]
 
     # --- D.  Hand-adjusted launch/land times
-    tlaunch = 874.6
-    tland = 889.5
+    t_launch = 874.6
+    t_land = 889.5
 
-    print(f"\tDetected Launch: {tlaunch:.2f}s")
-    print(f"\tDetected Land: {tland:.2f}s")
-    print(f"\tFlight Duration: {tland - tlaunch:.2f}s")
+    print(f"\tDetected Launch: {t_launch:.2f}s")
+    print(f"\tDetected Land: {t_land:.2f}s")
+    print(f"\tFlight Duration: {t_land - t_launch:.2f}s")
 
     plt.figure(figsize=(10, 4))
     plt.plot(time_raw, acceleration_mag, label="Total Acceleration (acceleration_mag)", color="gray", alpha=1.0)
-    plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
-    plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
+    plt.axvline(t_launch, color="g", linestyle="--", label="Detected Launch")
+    plt.axvline(t_land, color="r", linestyle="--", label="Detected Impact")
     plt.title("Step 2: Launch and Impact Detection Check")
     plt.ylabel("m/s^2")
     plt.legend()
-    plt.xlim(tlaunch - 0.5, tland + 0.5)
+    plt.xlim(t_launch - 0.5, t_land + 0.5)
     plt.grid(True)
     add_2d_plot_note("Actually launch & chute deploy")
     plt.savefig(f"{plot_directory}/launch-chute-plot.pdf")
@@ -86,12 +94,12 @@ def read_prepare_9_dof(raw_data_file, plot_directory):
 
     plt.figure(figsize=(10, 4))
     plt.plot(time_raw, acceleration_mag, label="Total Acceleration (acceleration_mag)", color="gray", alpha=1.0)
-    plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
-    plt.axvline(tland, color="r", linestyle="--", label="Detected Impact")
+    plt.axvline(t_launch, color="g", linestyle="--", label="Detected Launch")
+    plt.axvline(t_land, color="r", linestyle="--", label="Detected Impact")
     plt.title("Step 2: Hand-corrected Launch and Impact Detection Check")
     plt.ylabel("m/s^2")
     plt.legend()
-    plt.xlim(tlaunch - 0.3, tland + 0.3)
+    plt.xlim(t_launch - 0.3, t_land + 0.3)
     plt.grid(True)
     add_2d_plot_note("hand adjusted flight duration")
     plt.savefig(f"{plot_directory}/corrected-lauch-chute-plot.pdf")
@@ -105,36 +113,36 @@ def read_prepare_9_dof(raw_data_file, plot_directory):
     plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of Ax_b (whole input raw_input_data)")
+    plt.title("PSD of ax_b (whole input raw_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
     plt.show()
 
-    ax_freq, ax_psd = psd.get_psd(ay_b, fs=sample_frequency, nperseg=1024)
+    ay_freq, ay_psd = psd.get_psd(ay_b, fs=sample_frequency, nperseg=1024)
     # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
 
     plt.figure(figsize=(8, 4))
-    plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
+    plt.loglog(ay_freq[1:], ay_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of Ay_b (whole input raw_input_data)")
+    plt.title("PSD of ay_b (whole input raw_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/full-psd-plot-ax.pdf")
     plt.show()
 
-    ax_freq, ax_psd = psd.get_psd(az_b, fs=sample_frequency, nperseg=1024)
+    az_freq, az_psd = psd.get_psd(az_b, fs=sample_frequency, nperseg=1024)
     # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
 
     plt.figure(figsize=(8, 4))
-    plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
+    plt.loglog(az_freq[1:], az_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of Az_b (whole input raw_input_data)")
+    plt.title("PSD of az_b (whole input raw_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/full-psd-plot-ay.pdf")
     plt.show()
 
     plt.figure(figsize=(8, 4))
@@ -143,24 +151,25 @@ def read_prepare_9_dof(raw_data_file, plot_directory):
     plt.ylabel("PSD (m²/s⁴/Hz)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.title("Zoomed PSD of Ax_b (whole input raw_input_data)")
+    plt.title("Zoomed PSD of ax_b (whole input raw_input_data)")
     plt.xlim(0.2, 2.0)
     plt.ylim(0.1, 100.0)
-    plt.savefig(f"{plot_directory}/zoomed-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/zoomed-psd-plot-az.pdf")
     plt.show()
 
     # print(f"PSD: {len(ax_b)=}, {len(ax_psd)=}")
 
     # --- F. FILTERING Data - Butterworth (or simple IIR)
     """ No Filtering indicated in PSD 
+    TODO CHANGE VARIABLES
     # only perform simple IIR filter to see the error in the acceleration x-axis
     ax_iir = prep.simple_firstorder_iir_filter(ax_t, 0.5)
 
     # use higher accuracy Butterworth filtering
     cutoff = sample_frequency / 4.0
     sos = signal.butter(2, cutoff / (0.5 * sample_frequency), btype="lowpass", output="sos")
-    ax_f, ay_f, az_f = [signal.sosfiltfilt(sos, v) for v in [ax_t, ay_t, az_t]]
-    gr_f, gp_f, gy_f = [signal.sosfiltfilt(sos, v) for v in [gr_t, gp_t, gy_t]]
+    ax_f, ay_f, az_f = [signal.sosfiltfilt(sos, v) for v in [ax_b, ay_b, az_b]]
+    gr_f, gp_f, gy_f = [signal.sosfiltfilt(sos, v) for v in [gr_f, gp_f, gy_f]]
 
     plt.figure(figsize=(12, 6))
     plt.scatter(time_t, ax_t, color="black", s=8, alpha=1.0, label="Raw Data")
@@ -182,7 +191,7 @@ def read_prepare_9_dof(raw_data_file, plot_directory):
     plt.figure(figsize=(10, 4))
     plt.plot(time_t, ax_t, alpha=0.3, label="Raw Ax")
     plt.plot(time_t, ax_f, color="blue", label="Filtered Ax")
-    plt.xlim(tlaunch - 0.5, tlaunch + 6.0)
+    plt.xlim(t_launch - 0.5, t_launch + 6.0)
     plt.ylim(-.2, 3.0)
     plt.title("Step 8: Sensor Health Check (Thrust Phase Clipping)")
     plt.ylabel("m/s^2")
@@ -191,32 +200,67 @@ def read_prepare_9_dof(raw_data_file, plot_directory):
     add_2d_plot_note("We know massive clip at launch, looks minimized here", x=0.03)
     plt.savefig(f"{plot_directory}/acceleration-clipping-plot.pdf")
     plt.show()
-
     """
 
-    # TODO CORRECT IPLEMENTATION ABOVE
-    # TODO IMPLEMENT rest of processing !!!
+    # 4. COG CORRECTION where CoG and Center-of-rotation coincide
+    # For a tumbling ball, use the full 3D rigid - body correction
+    # with a fixed body-frame offset vector; the formula does not change, only the angular motion does.
 
-    # 4. COG CORRECTION
-    # 4 inches offset to meters
+    # Sensor position relative to CoG, expressed in BODY frame
+    # +X body axis assumed 4 inches offset to meters
     # TODO 4" offset is guess for 8" shell
     inch_offset = 4
     sensor_offset = inch_offset * 0.0254
-    gr_dot, gp_dot, gy_dot = [np.gradient(v, dt_avg) for v in [gr_f, gp_f, gy_f]]
-    ax_cg = ax_b - (sensor_offset * (gr_dot + gr_f ** 2))
-    ay_cg = ay_b - (sensor_offset * (gp_dot + gp_f ** 2))
-    az_cg = az_b - (sensor_offset * (gy_dot + gy_f ** 2))
+
+    r_cg_to_sensor = np.array([sensor_offset, 0.00, 0.00])  # meters
+
+    # Angular velocity (rad/s) in BODY frame
+    # TODO CHECK ABOVE IF # implies gr=ωx, gp=ωy, gy=ωz
+    omega = np.column_stack((gr_f, gp_f, gy_f))
+
+    # Angular acceleration (rad/s^2)
+    alpha = np.column_stack((
+        np.gradient(gr_f, time_f),
+        np.gradient(gp_f, time_f),
+        np.gradient(gy_f, time_f),
+    ))
+
+    # Sensor linear acceleration (gravity already removed)
+    a_sensor = np.column_stack((ax_b, ay_b, az_b))
+
+    # Rigid-body correction terms
+    alpha_cross_r = np.cross(alpha, r_cg_to_sensor)
+    omega_cross_r = np.cross(omega, r_cg_to_sensor)
+    centripetal = np.cross(omega, omega_cross_r)
+
+    # Center-of-gravity acceleration
+    a_cg = a_sensor - alpha_cross_r - centripetal
+
+    # Unpack
+    ax_cg, ay_cg, az_cg = a_cg.T
 
     # 5. INERTIAL TRANSFORM
     # We use the sensor's OWN quaternions to rotate the lin_accel to Inertial Frame
-    ax_I = np.zeros_like(t_f)
-    ay_I = np.zeros_like(t_f)
-    az_I = np.zeros_like(t_f)
+    ax_I = np.zeros_like(time_f)
+    ay_I = np.zeros_like(time_f)
+    az_I = np.zeros_like(time_f)
 
-    for i in range(len(t_f)):
+    for i in range(len(time_f)):
         # BNO086 provides Body -> Inertial orientation
-        a_inertial = quaternion_rotate(q_f[i], [ax_cg[i], ay_cg[i], az_cg[i]])
+        # TODO CHECK   a_inertial = quaternion_rotate(quat_f[i], a_body)
+        # TODO This is correct only if Quaternion is body → inertial
+        # TODO and  quaternion_rotate(q, v) implements q · v · q⁻¹
+        a_inertial = quaternion_rotate(quat_f[i], [ax_cg[i], ay_cg[i], az_cg[i]])
         ax_I[i], ay_I[i], az_I[i] = a_inertial
 
+    # Body-frame acceleration at CoG (gravity already removed)
+    ax_final = ax_cg
+    ay_final = ay_cg
+    az_final = az_cg
+
+    # Vertical acceleration (sensor Z mapped to inertial Z)
+    # TODO CHECK Inertial Z is vertical and Quaternion is Earth-aligned
+    a_vertical = az_I
+
     print(f"--- NINE DOF Processing END")
-    return time_t, ax_final, ay_final, az_final, ax_f, quat, tlaunch, tland
+    return time_f, ax_final, ay_final, az_final, a_vertical, quat_f, t_launch, t_land
