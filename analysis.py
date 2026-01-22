@@ -122,7 +122,7 @@ BNO086 Sensor Simplification:
     - Checking sensor calibration (should read ~9.81 m/s² when stationary)
     - Redundant safety check
 
-SOURCE Credit - thanks!:
+SOURCE Credit - thanks to Monte Carlos!:
     https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
     https://www.youtube.com/watch?v=mb1RNYKtWQE
 """
