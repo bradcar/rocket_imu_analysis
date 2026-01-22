@@ -63,7 +63,7 @@ t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy e
 
 ## Video Output
 
-<video src="videos/rocket-trajectory0-poc.mp4" controls></video>
+<video src="video/rocket-trajectory-poc.mp4" controls muted autoplay loop style="max-width: 100%;"></video>
 
 Rocket IMU Data issues Issues:
 - there is massive clipping of accelerometer at launch, likely altitude and velocity wrong
