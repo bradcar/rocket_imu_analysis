@@ -9,6 +9,44 @@ from mylib.quaternion_functions import quaternion_rotate
 np.set_printoptions(precision=10)
 
 
+def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gy_f, gp_f, gr_f):
+    """
+    CoG Correction for shell, accurate gyro data is critical
+    This 9 DOF uses a proper Vector Cross Product method. Which is much better for a "tumbling shell."
+
+    a_cg =a_sensor − (alpha × r) − (ω × (ω × r))
+    alpha × r: Tangential acceleration (due to change in spin rate).
+    ω × (ω × r): Centripetal acceleration (due to constant spin).
+    """
+    r_cg_to_sensor = np.array([sensor_offset, 0.00, 0.00])  # meters
+
+    # Angular velocity (rad/s) in BODY frame
+    # TODO CHECK ABOVE IF # implies gr=ωx, gp=ωy, gy=ωz
+    omega = np.column_stack((gy_f, gp_f, gr_f))
+
+    # Angular acceleration (rad/s^2)
+    alpha = np.column_stack((
+        np.gradient(gy_f, time_f),
+        np.gradient(gp_f, time_f),
+        np.gradient(gr_f, time_f),
+    ))
+
+    # Sensor linear acceleration (gravity already removed)
+    a_sensor = np.column_stack((ax_b, ay_b, az_b))
+
+    # Rigid-body correction terms
+    alpha_cross_r = np.cross(alpha, r_cg_to_sensor)
+    omega_cross_r = np.cross(omega, r_cg_to_sensor)
+    centripetal = np.cross(omega, omega_cross_r)
+
+    # Center-of-gravity acceleration
+    a_cg = a_sensor - alpha_cross_r - centripetal
+
+    # Unpack
+    ax_cg, ay_cg, az_cg = a_cg.T
+    return ax_cg, ay_cg, az_cg
+
+
 def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     """
     Reads raw 9 DOF IMU data for spherical shell,
@@ -28,11 +66,11 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     # Linear Accel (Gravity already removed by BNO086 hardware)
     ax_lin, ay_lin, az_lin = data[:, 5], data[:, 6], data[:, 7]
 
-    # Gyros (used in CoG correction)
+    # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
     # TODO CRITICAL check if:
-    # gr = ωx
-    # gp = ωy
-    # gy = ωz
+    # gr = ωx ???
+    # gp = ωy ???
+    # gy = ωz ???
     gy, gp, gr = data[:, 8], data[:, 9], data[:, 10]
 
     # --- B. Calculate Time Sampling Average interval (dt & freq)
@@ -49,12 +87,12 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     print(f"\tPlot Directory: ./{plot_directory}")
     print("Flight Data:")
 
-    # Data Freq should be greater than 100 Hz
+    # Data freq should be greater than 100 Hz
     print(f"\tAverate Data Freq: {sample_frequency:.2f} Hz")
     print(f"\tAverage time step: {dt_avg:.4f} seconds ({dt_avg * 1000:.1f} msec)")
     print(f"\tMin/Max interval: {dt_min * 1000:.1f} ms / {dt_max * 1000:.1f} ms")
 
-    # jitter should be less than 2%
+    # Jitter should be less than 2%
     print(f"\tStandard Dev: {dt_std * 1000:.1f} ms, jitter: {(dt_std / dt_avg) * 100:.0f}%")
 
     # --- C. Launch/Land time Detection based on high acceleration
@@ -69,9 +107,10 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     time_f = time_raw[mask]
     quat_f = q_raw[mask]
     ax_b, ay_b, az_b = ax_lin[mask], ay_lin[mask], az_lin[mask]
-    gr_f, gp_f, gy_f = gr[mask], gp[mask], gy[mask]
+    gy_f, gp_f, gr_f = gy[mask], gp[mask], gr[mask]
 
     # --- D.  Hand-adjusted launch/land times
+    # TODO adjust as needed
     t_launch = 874.6
     t_land = 889.5
 
@@ -157,29 +196,27 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     plt.savefig(f"{plot_directory}/zoomed-psd-plot-az.pdf")
     plt.show()
 
+    # debug print
     # print(f"PSD: {len(ax_b)=}, {len(ax_psd)=}")
 
     # --- F. FILTERING Data - Butterworth (or simple IIR)
     """ No Filtering indicated in PSD 
-    TODO CHANGE VARIABLES
-    # only perform simple IIR filter to see the error in the acceleration x-axis
-    ax_iir = prep.simple_firstorder_iir_filter(ax_t, 0.5)
 
     # use higher accuracy Butterworth filtering
     cutoff = sample_frequency / 4.0
     sos = signal.butter(2, cutoff / (0.5 * sample_frequency), btype="lowpass", output="sos")
     ax_f, ay_f, az_f = [signal.sosfiltfilt(sos, v) for v in [ax_b, ay_b, az_b]]
-    gr_f, gp_f, gy_f = [signal.sosfiltfilt(sos, v) for v in [gr_f, gp_f, gy_f]]
+    gy_f, gp_f, gr_f = [signal.sosfiltfilt(sos, v) for v in [gy_f, gp_f, gr_f]]
 
     plt.figure(figsize=(12, 6))
     plt.scatter(time_t, ax_t, color="black", s=8, alpha=1.0, label="Raw Data")
-    plt.plot(time_t, ax_iir, color="red", label="IIR (Lagged)")
+    plt.plot(time_t, ax_g, color="red", label="ax_b unfiltered")
     plt.plot(time_t, ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase)")
-    plt.title("Step 3: Filter Phase-Lag Comparison")
+    plt.title("Step 3: Filter & Unfilterd Comparison")
     plt.ylabel("m/s^2")
     plt.legend()
-    add_2d_plot_note("IIR lags, only forward looking, use Butterworh filter", x=0.40)
-    plt.savefig(f"{plot_directory}/iir-butterworth-plot.pdf")
+    add_2d_plot_note("add comment about Butterworh filter", x=0.40)
+    plt.savefig(f"{plot_directory}/butterworth-orig-plot.pdf")
     plt.show()
 
     # PSD of filtered Data
@@ -187,57 +224,30 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     psd.plot_psd(ax_f_freq, ax_f_psd, title="PSD of Ax_f (truncated dataset)")
     print(f"{len(ax_f)=}, {len(ax_f_psd)=}")
 
-    # Clipping Check
+    # Clipping Check raw vs. Filtered Zoomed in
     plt.figure(figsize=(10, 4))
-    plt.plot(time_t, ax_t, alpha=0.3, label="Raw Ax")
-    plt.plot(time_t, ax_f, color="blue", label="Filtered Ax")
+    plt.plot(time_f, ax_b, alpha=0.3, label="Raw Ax")
+    plt.plot(time_f, ax_f, color="blue", label="Filtered Ax")
     plt.xlim(t_launch - 0.5, t_launch + 6.0)
     plt.ylim(-.2, 3.0)
-    plt.title("Step 8: Sensor Health Check (Thrust Phase Clipping)")
+    plt.title("IMU Health Check (Lift Phase Clipping)")
     plt.ylabel("m/s^2")
     plt.legend()
     plt.grid(True)
-    add_2d_plot_note("We know massive clip at launch, looks minimized here", x=0.03)
+    add_2d_plot_note("likely massive clip at launch", x=0.03)
     plt.savefig(f"{plot_directory}/acceleration-clipping-plot.pdf")
     plt.show()
     """
 
     # 4. COG CORRECTION where CoG and Center-of-rotation coincide
-    # For a tumbling ball, use the full 3D rigid - body correction
-    # with a fixed body-frame offset vector; the formula does not change, only the angular motion does.
-
-    # Sensor position relative to CoG, expressed in BODY frame
+    # For a tumbling ball, use the full 3D rigid body correction
+    # Sensor position relative to CoG assuming CoG and center-rotation aligned, expressed in BODY frame
     # +X body axis assumed 4 inches offset to meters
     # TODO 4" offset is guess for 8" shell
     inch_offset = 4
     sensor_offset = inch_offset * 0.0254
-
-    r_cg_to_sensor = np.array([sensor_offset, 0.00, 0.00])  # meters
-
-    # Angular velocity (rad/s) in BODY frame
-    # TODO CHECK ABOVE IF # implies gr=ωx, gp=ωy, gy=ωz
-    omega = np.column_stack((gr_f, gp_f, gy_f))
-
-    # Angular acceleration (rad/s^2)
-    alpha = np.column_stack((
-        np.gradient(gr_f, time_f),
-        np.gradient(gp_f, time_f),
-        np.gradient(gy_f, time_f),
-    ))
-
-    # Sensor linear acceleration (gravity already removed)
-    a_sensor = np.column_stack((ax_b, ay_b, az_b))
-
-    # Rigid-body correction terms
-    alpha_cross_r = np.cross(alpha, r_cg_to_sensor)
-    omega_cross_r = np.cross(omega, r_cg_to_sensor)
-    centripetal = np.cross(omega, omega_cross_r)
-
-    # Center-of-gravity acceleration
-    a_cg = a_sensor - alpha_cross_r - centripetal
-
-    # Unpack
-    ax_cg, ay_cg, az_cg = a_cg.T
+    print(f"Sensor offset: {sensor_offset:.3f} m, (should be 0.102 m for 4in on an 8in shell)")
+    ax_cg, ay_cg, az_cg = cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gy_f, gp_f, gr_f)
 
     # 5. INERTIAL TRANSFORM
     # We use the sensor's OWN quaternions to rotate the lin_accel to Inertial Frame
