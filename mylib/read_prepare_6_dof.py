@@ -5,7 +5,7 @@ import mylib.prepare_functions as prep
 import mylib.psd_functions as psd
 from mylib.add_2d_plot_note import add_2d_plot_note
 
-# use fp64 thoughout
+# use fp64 prints thoughout
 np.set_printoptions(precision=10)
 
 
@@ -37,7 +37,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     ax_b, ay_b, az_b = data[:, 1], data[:, 2], data[:, 3]
     gr_b, gp_b, gy_b = data[:, 4], data[:, 5], data[:, 6]
 
-    # --- B. Calculate Acceleration Magnitude and Time Sampling Averate interval (dt & freq)
+    # --- B. Calculate Acceleration Magnitude and Time Sampling Average interval (dt & freq)
     acceleration_mag = np.sqrt(ax_b ** 2 + ay_b ** 2 + az_b ** 2)
     deltas = np.diff(time_raw)
     dt_avg = np.mean(deltas)
@@ -126,33 +126,33 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     plt.title("PSD of Ax_b (whole input raw_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/full-psd-plot-ax.pdf")
     plt.show()
 
-    ax_freq, ax_psd = psd.get_psd(ay_b, fs=sample_frequency, nperseg=1024)
+    ay_freq, ay_psd = psd.get_psd(ay_b, fs=sample_frequency, nperseg=1024)
     # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
 
     plt.figure(figsize=(8, 4))
-    plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
+    plt.loglog(ay_freq[1:], ay_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
     plt.title("PSD of Ay_b (whole input raw_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/full-psd-plot-ay.pdf")
     plt.show()
 
-    ax_freq, ax_psd = psd.get_psd(az_b, fs=sample_frequency, nperseg=1024)
+    az_freq, az_psd = psd.get_psd(az_b, fs=sample_frequency, nperseg=1024)
     # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
 
     plt.figure(figsize=(8, 4))
-    plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
+    plt.loglog(az_freq[1:], az_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
     plt.title("PSD of Az_b (whole input raw_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/full-psd-plot-az.pdf")
     plt.show()
 
     plt.figure(figsize=(8, 4))
@@ -164,7 +164,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     plt.title("Zoomed PSD of Ax_b (whole input raw_input_data)")
     plt.xlim(0.2, 2.0)
     plt.ylim(0.1, 100.0)
-    plt.savefig(f"{plot_directory}/zoomed-psd-plot.pdf")
+    plt.savefig(f"{plot_directory}/zoomed-psd-plot-ax-zoom.pdf")
     plt.show()
 
     # print(f"PSD: {len(ax_b)=}, {len(ax_psd)=}")

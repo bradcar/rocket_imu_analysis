@@ -129,6 +129,7 @@ SOURCE Credit - thanks to Monte Carlos!:
 
 import matplotlib.pyplot as plt
 import numpy as np
+from ipywidgets.widgets.trait_types import time_from_json
 
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.animate_projectile import animate_projectile
@@ -137,7 +138,7 @@ from mylib.read_prepare_6_dof import read_prepare_6_dof
 
 # from mylib.read_prepare_6dof import read_prepare_9_dof
 
-# use fp64 thoughout
+# use fp64 prints thoughout
 np.set_printoptions(precision=10)
 
 # --- CONSTANTS & UTILITIES ---
@@ -229,19 +230,21 @@ plot_directory = "plots"
 
 # Read and prepare 6 DOF sensor data to create Fused results
 filename = "raw_input_data/launch_data.txt"
-time_t, ax_final, ay_final, az_final, ax_vert, quat, tlaunch, tland = read_prepare_6_dof(filename, plot_directory)
+time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_6_dof(filename, plot_directory)
 
 # Read and prepare 9 DOF sensor data Fused results
 filename = "raw_input_data/shell_data_xxxxxx_v1.txt"
-# time_t, ax_final, ay_final, az_final, ax_vert, quat, tlaunch, tland = read_prepare_9_dof(filename, plot_directory)
+# CoG correction assumes spherical shell
+# TODO check Quat & Gyro mapping
+# time_t, ax_final, ay_final, az_final, ax_vert, quat, tlaunch, tland = read_prepare_9_dof_shell(filename, plot_directory)
 
 # --- 1. INERTIAL TRANSFORM with Gravity removed
-ax_I, ay_I, az_I = body_to_inertial_acceleration(time_t, ax_final, ay_final, az_final, quat)
+ax_I, ay_I, az_I = body_to_inertial_acceleration(time_f, ax_final, ay_final, az_final, quat)
 
 plt.figure(figsize=(10, 4))
-plt.plot(time_t, ax_I, label="Ax_Inertial")
-plt.plot(time_t, ay_I, label="Ay_Inertial")
-plt.plot(time_t, az_I, label="Az_Inertial", linewidth=2)
+plt.plot(time_f, ax_I, label="Ax_Inertial")
+plt.plot(time_f, ay_I, label="Ay_Inertial")
+plt.plot(time_f, az_I, label="Az_Inertial", linewidth=2)
 plt.title("Step 6: Inertial Acceleration (Gravity Subtracted)")
 plt.ylabel("m/s^2")
 plt.legend()
@@ -254,7 +257,7 @@ plt.show()
 # Double Integrate:
 #   1st: create velocities from acceleration
 #   2nd: create positions from velocities
-vx_c, vy_c, vz_c, px_f, py_f, pz_f = integrate_acceleration(time_t, ax_I, ay_I, az_I, tland=tland)
+vx_c, vy_c, vz_c, px_f, py_f, pz_f = integrate_acceleration(time_f, ax_I, ay_I, az_I, tland=t_land)
 print("\nCalculated Flight Data:")
 print(f"\tMax altitude: {pz_f.max():.1f} m")
 print(f"\tMax velocity: {vz_c.max():.1f} m/s")
@@ -265,17 +268,17 @@ print("\nCreate final plots")
 # Stacked plot of altitude and ground drift horizontal
 plt.figure(figsize=(12, 8))
 plt.subplot(2, 1, 1)
-plt.plot(time_t, pz_f, color="blue", lw=2.5, label="Vertical Altitude (Z)")
-plt.fill_between(time_t, pz_f, color="blue", alpha=0.1)
-plt.axvline(tlaunch, color="g", linestyle="--", label="Detected Launch")
-plt.axvline(tland, color="r", linestyle="--", label="Detected Chute")
+plt.plot(time_f, pz_f, color="blue", lw=2.5, label="Vertical Altitude (Z)")
+plt.fill_between(time_f, pz_f, color="blue", alpha=0.1)
+plt.axvline(t_launch, color="g", linestyle="--", label="Detected Launch")
+plt.axvline(t_land, color="r", linestyle="--", label="Detected Chute")
 plt.title("Step 8: Final Drift-Corrected Altitude")
 plt.ylabel("Meters (m)")
 add_2d_plot_note("likely altitude too low due to acceleration clipping at launch", x=0.4)
 plt.legend()
 # stacked
 plt.subplot(2, 1, 2)
-plt.plot(time_t, np.sqrt(px_f ** 2 + py_f ** 2), label="Ground Distance (Horizontal)", color="purple")
+plt.plot(time_f, np.sqrt(px_f ** 2 + py_f ** 2), label="Ground Distance (Horizontal)", color="purple")
 plt.title("Step 8: Ground Distance (Horizontal)")
 plt.xlabel("Time (s)")
 plt.ylabel("Meters (m)")
@@ -311,4 +314,4 @@ plt.show()
 print("\nCreate Animation of flight")
 # Animation of projectile in VPython using position, quaternion
 # Output Altitude, Velocity, and Angular rotational velocity
-animate_projectile(time_t, px_f, py_f, pz_f, vz_c, quat, ax_vert)
+animate_projectile(time_f, px_f, py_f, pz_f, vz_c, quat, ax_vert)
