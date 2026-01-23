@@ -112,7 +112,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     plt.xlim(t_launch - 0.3, t_land + 0.3)
     plt.grid(True)
     add_2d_plot_note("hand adjusted flight duration")
-    plt.savefig(f"{plot_directory}/corrected-lauch-chute-plot.pdf")
+    plt.savefig(f"{plot_directory}/corrected-launch-chute-plot.pdf")
     plt.show()
 
     # --- F. Analyze PSD Power Spectral Density - Is filtering needed?
