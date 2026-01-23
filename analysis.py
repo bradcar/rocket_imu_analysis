@@ -119,7 +119,7 @@ BNO086 Fused Sensor Simplification:
     - Gives true specific force + gravity
     Useful for:
         x, y, z = bno.acceleration # acceleration with gravity direction included
-    _ Detecting orientation to Earth before lauch
+    _ Detecting orientation to Earth before launch
     - Checking sensor calibration (should read ~9.81 m/s² when stationary)
     - Redundant safety check
 
