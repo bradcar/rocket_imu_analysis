@@ -3,13 +3,13 @@ import numpy as np
 
 import mylib.psd_functions as psd
 from mylib.add_2d_plot_note import add_2d_plot_note
-from mylib.quaternion_functions import quaternion_rotate
+from mylib.quaternion_functions import quaternion_rotate, quaternion_conjugate
 
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)
 
 
-def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gy_f, gp_f, gr_f):
+def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp_f):
     """
     CoG Correction for shell, accurate gyro data is critical
     This 9 DOF uses a proper Vector Cross Product method. Which is much better for a "tumbling shell."
@@ -21,14 +21,14 @@ def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gy_f, gp_f, gr
     r_cg_to_sensor = np.array([sensor_offset, 0.00, 0.00])  # meters
 
     # Angular velocity (rad/s) in BODY frame
-    # TODO CHECK ABOVE IF # implies gr=ωx, gp=ωy, gy=ωz
-    omega = np.column_stack((gy_f, gp_f, gr_f))
+    # TODO DOUBLECHECK ABOVE IF # implies gr=ωx, gp=ωy, gy=ωz
+    omega = np.column_stack((gr_f, gy_f, gp_f))
 
     # Angular acceleration (rad/s^2)
     alpha = np.column_stack((
-        np.gradient(gy_f, time_f),
-        np.gradient(gp_f, time_f),
         np.gradient(gr_f, time_f),
+        np.gradient(gy_f, time_f),
+        np.gradient(gp_f, time_f)
     ))
 
     # Sensor linear acceleration (gravity already removed)
@@ -59,19 +59,24 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     data = np.loadtxt(raw_data_file).astype(np.float64)
     time_raw = data[:, 0]
 
-    # TODO IMPORTANT Need to map Quaternion to VPython Quaternion and Gyros !!!!!!!
+    # TODO test re-map of Quaternion
     # BNO Quaternions: Hamiltonian (r, i, j, k)
-    q_raw = data[:, 1:5]
+    # Re-Mapping: X_new = -X_old, Y_new = Z_old, Z_new = Y_old
+    q_raw = np.column_stack((
+        data[:, 0],  # qr Scalar is same)
+        -data[:, 1], # qi is Mapped to -X (roll)
+        data[:, 3],  # qj is Mapped to Z (yaw)
+        data[:, 2]   # qk is Mapped to Y (pitch)
+    ))
 
     # Linear Accel (Gravity already removed by BNO086 hardware)
     ax_lin, ay_lin, az_lin = data[:, 5], data[:, 6], data[:, 7]
 
     # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
-    # TODO CRITICAL check if:
-    # gr = ωx ???
-    # gp = ωy ???
-    # gy = ωz ???
-    gy, gp, gr = data[:, 8], data[:, 9], data[:, 10]
+    # TODO CRITICAL check gyro orientation
+    gr = -data[:, 10]  # Roll mapped to X (negated)
+    gy = data[:, 8]  # Yaw mapped to Y
+    gp = data[:, 9]  # Pitch mapped to Z
 
     # --- B. Calculate Time Sampling Average interval (dt & freq)
     deltas = np.diff(time_raw)
@@ -247,7 +252,7 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     inch_offset = 4
     sensor_offset = inch_offset * 0.0254
     print(f"Sensor offset: {sensor_offset:.3f} m, (should be 0.102 m for 4in on an 8in shell)")
-    ax_cg, ay_cg, az_cg = cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gy_f, gp_f, gr_f)
+    ax_cg, ay_cg, az_cg = cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp_f)
 
     # 5. INERTIAL TRANSFORM
     # We use the sensor's OWN quaternions to rotate the lin_accel to Inertial Frame
@@ -257,11 +262,22 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
 
     for i in range(len(time_f)):
         # BNO086 provides Body -> Inertial orientation
-        # TODO CHECK   a_inertial = quaternion_rotate(quat_f[i], a_body)
-        # TODO This is correct only if Quaternion is body → inertial
-        # TODO and  quaternion_rotate(q, v) implements q · v · q⁻¹
-        a_inertial = quaternion_rotate(quat_f[i], [ax_cg[i], ay_cg[i], az_cg[i]])
+
+        # The BNO08x quaternion (quat_f) represents the orientation of the sensor.
+        # To rotate a vector from the Body frame to the Inertial frame with conjugate
+
+        # TODO CHECK orientation
+        q_body_to_inertial = quaternion_conjugate(quat_f[i])
+
+        # Define the acceleration vector at the CoG in the Body frame
+        a_body = [ax_cg[i], ay_cg[i], az_cg[i]]
+
+        # Perform the rotation: a_I = q * a_b * q_inv
+        a_inertial = quaternion_rotate(q_body_to_inertial, a_body)
+
+        # Unpack into Inertial arrays
         ax_I[i], ay_I[i], az_I[i] = a_inertial
+
 
     # Body-frame acceleration at CoG (gravity already removed)
     ax_final = ax_cg
