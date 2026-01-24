@@ -1,9 +1,9 @@
 # IMU flight data analysis
 
-Analysis of Quaterniion, Accelerometerm & Gyrometer Fused 9 DOF data pipeline analysis.
+This is a post-flight analysis pipeline using results from a fused 9 DOF Quaternion, Accelerometer & Gyrometer.
 
-Analysis of Accelerometer & Gyrometer 6 DOF data pipeline analysis. 
-For 6 DOF, we have to estimate quaternions and remove gravity from acceleration data.
+It is based on a post-flight analysis pipeline using results from a 6 DOF Accelerometer & Gyrometer.
+The 6 DOF data means that we have to estimate quaternions and remove gravity from acceleration data.
 
 ## Running Analysis and Animation:
 
@@ -17,7 +17,7 @@ Run script to create video in ./video from ~/Downloads/frame_0000.png to ~/Downl
 
 ## Original Rocket Flight Analysis:
 
-We used Carlos Montalvo's flight data and original code to create this code. 
+We used Carlos Montalvo's flight data and original analysis pipeline code to create this code. 
 In addition, we created a VPython code to animate the flight data. This animation also shows the flight path trail.
 Based the vertical acceleration data, we show the trail in a thick/red trail during high-acceleration which we assume is thrust.
 The the flight trail is shown as a thin/yellow trail during coasting.
