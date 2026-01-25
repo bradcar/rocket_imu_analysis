@@ -135,7 +135,6 @@ import numpy as np
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.animate_projectile import animate_projectile
 from mylib.quaternion_functions import quaternion_rotate
-from mylib.read_prepare_6_dof import read_prepare_6_dof
 from mylib.read_prepare_9_dof import read_prepare_9_dof_shell
 
 # use fp64 prints thoughout
@@ -227,26 +226,30 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, t_land
 ##############################################################
 # ANALYSIS OF IMU FLIGHT DATA - 9 DoF and 6 DoF processing
 
-
-# Read and prepare 6 DOF sensor data to create Fused results
+# # Read and prepare 6 DOF sensor data to create Fused results
 plot_directory = "plots"
 os.makedirs(plot_directory, exist_ok=True)
 
 filename = "raw_input_data/launch_data.txt"
 time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_6_dof(filename, plot_directory)
 
-"""
-# TODO: DEBUG
-#  Read and prepare 9 DOF sensor data Fused results, CoG correction assumes spherical shell
-plot_directory = "plots-9-dof"
-os.makedirs(plot_directory, exist_ok=True)
 
-filename = "imu_data_prep/data_logs/flight_log_2026xxxx_xpm_whole.csv"
-sensor_cm_offset = 0.0  # ~10cm for 4" for 8" shell
-time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_9_dof_shell(filename,
-                                                                                                 plot_directory,
-                                                                                                 sensor_cm_offset)
-"""
+# 9 DoF SENSOR TESTING -  CoG correction assumes spherical shell
+#  * yaw test is in proper orientation & direction
+#  * vertical acceleration is correct
+#  * roll in x-axis has the proper orientation & direction
+# TODO: DEBUG
+#  * need to double check gyro and COG offset
+# plot_directory = "plots-9-dof"
+# os.makedirs(plot_directory, exist_ok=True)
+#
+# filename = "imu_data_prep/data_logs/flight_log_2026xxxx_xpm_whole.csv"
+# sensor_cm_offset = 0.0  # ~10cm for 4" for 8" shell
+# time_f, ax_final, ay_final, az_final, quat, t_launch, t_land = read_prepare_9_dof_shell(filename,
+#                                                                                         plot_directory,
+#                                                                                         sensor_cm_offset)
+
+
 # --- 1. INERTIAL TRANSFORM with Gravity removed
 ax_I, ay_I, az_I = body_to_inertial_acceleration(time_f, ax_final, ay_final, az_final, quat)
 
@@ -323,4 +326,6 @@ plt.show()
 print("\nCreate Animation of flight")
 # Animation of projectile in VPython using position, quaternion
 # Output Altitude, Velocity, and Angular rotational velocity
-animate_projectile(time_f, px_f, py_f, pz_f, vz_c, quat, ax_vert)
+
+animate_projectile(time_f, px_f, py_f, pz_f, vz_c, quat, az_I)
+# animate_projectile(time_f, px_f, py_f, pz_f, vz_c, quat, ax_vert)

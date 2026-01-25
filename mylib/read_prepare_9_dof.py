@@ -22,8 +22,7 @@ def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp
     """
     r_cg_to_sensor = np.array([sensor_offset, 0.00, 0.00])  # meters
 
-    # Angular velocity (rad/s) in BODY frame
-    # TODO DOUBLECHECK ABOVE IF # implies gr=ωx, gp=ωy, gy=ωz
+    # Angular velocity (rad/s) in BODY frame: gr=ωx, gp=ωy, gy=ωz
     omega = np.column_stack((gr_f, gy_f, gp_f))
 
     # Angular acceleration (rad/s^2)
@@ -75,10 +74,10 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     # BNO Quaternions: Hamiltonian (r, i, j, k)
     # Re-Mapping: X_new = -X_old, Y_new = Z_old, Z_new = Y_old
     q_raw = np.column_stack((
-        data[:, 4],  # qr Scalar is same)
-        -data[:, 5],  # qi is Mapped to -X (roll)
-        data[:, 7],  # qj is Mapped to Z (yaw)
-        data[:, 6]  # qk is Mapped to Y (pitch)
+        data[:, 4],  # qr Scalar is same
+        data[:, 5],  # qi is Mapped to -X (roll)
+        data[:, 6],  # qj is Mapped to Z (yaw)
+        data[:, 7]  # qk is Mapped to Y (pitch)
     ))
 
     # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
@@ -234,44 +233,43 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     # print(f"PSD: {len(ax_b)=}, {len(ax_psd)=}")
 
     # --- F. FILTERING Data - Butterworth (or simple IIR)
-    """ No Filtering indicated in PSD 
+    # No Filtering indicated in PSD
 
-    # use higher accuracy Butterworth filtering
-    cutoff = sample_frequency / 4.0
-    sos = signal.butter(2, cutoff / (0.5 * sample_frequency), btype="lowpass", output="sos")
-    ax_f, ay_f, az_f = [signal.sosfiltfilt(sos, v) for v in [ax_b, ay_b, az_b]]
-    gy_f, gp_f, gr_f = [signal.sosfiltfilt(sos, v) for v in [gy_f, gp_f, gr_f]]
-
-    plt.figure(figsize=(12, 6))
-    plt.scatter(time_t, ax_t, color="black", s=8, alpha=1.0, label="Raw Data")
-    plt.plot(time_t, ax_g, color="red", label="ax_b unfiltered")
-    plt.plot(time_t, ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase)")
-    plt.title("Step 3: Filter & Unfilterd Comparison")
-    plt.ylabel("m/s^2")
-    plt.legend()
-    add_2d_plot_note("add comment about Butterworh filter", x=0.40)
-    plt.savefig(f"{plot_directory}/butterworth-orig-plot.pdf")
-    plt.show()
-
-    # PSD of filtered Data
-    ax_f_freq, ax_f_psd = psd.get_psd(ax_f, fs=sample_frequency, nperseg=1024)
-    psd.plot_psd(ax_f_freq, ax_f_psd, title="PSD of Ax_f (truncated dataset)")
-    print(f"{len(ax_f)=}, {len(ax_f_psd)=}")
-
-    # Clipping Check raw vs. Filtered Zoomed in
-    plt.figure(figsize=(10, 4))
-    plt.plot(time_f, ax_b, alpha=0.3, label="Raw Ax")
-    plt.plot(time_f, ax_f, color="blue", label="Filtered Ax")
-    plt.xlim(t_launch - 0.5, t_launch + 6.0)
-    plt.ylim(-.2, 3.0)
-    plt.title("IMU Health Check (Lift Phase Clipping)")
-    plt.ylabel("m/s^2")
-    plt.legend()
-    plt.grid(True)
-    add_2d_plot_note("likely massive clip at launch", x=0.03)
-    plt.savefig(f"{plot_directory}/acceleration-clipping-plot.pdf")
-    plt.show()
-    """
+    # # use higher accuracy Butterworth filtering
+    # cutoff = sample_frequency / 4.0
+    # sos = signal.butter(2, cutoff / (0.5 * sample_frequency), btype="lowpass", output="sos")
+    # ax_f, ay_f, az_f = [signal.sosfiltfilt(sos, v) for v in [ax_b, ay_b, az_b]]
+    # gy_f, gp_f, gr_f = [signal.sosfiltfilt(sos, v) for v in [gy_f, gp_f, gr_f]]
+    #
+    # plt.figure(figsize=(12, 6))
+    # plt.scatter(time_t, ax_t, color="black", s=8, alpha=1.0, label="Raw Data")
+    # plt.plot(time_t, ax_g, color="red", label="ax_b unfiltered")
+    # plt.plot(time_t, ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase)")
+    # plt.title("Step 3: Filter & Unfilterd Comparison")
+    # plt.ylabel("m/s^2")
+    # plt.legend()
+    # add_2d_plot_note("add comment about Butterworh filter", x=0.40)
+    # plt.savefig(f"{plot_directory}/butterworth-orig-plot.pdf")
+    # plt.show()
+    #
+    # # PSD of filtered Data
+    # ax_f_freq, ax_f_psd = psd.get_psd(ax_f, fs=sample_frequency, nperseg=1024)
+    # psd.plot_psd(ax_f_freq, ax_f_psd, title="PSD of Ax_f (truncated dataset)")
+    # print(f"{len(ax_f)=}, {len(ax_f_psd)=}")
+    #
+    # # Clipping Check raw vs. Filtered Zoomed in
+    # plt.figure(figsize=(10, 4))
+    # plt.plot(time_f, ax_b, alpha=0.3, label="Raw Ax")
+    # plt.plot(time_f, ax_f, color="blue", label="Filtered Ax")
+    # plt.xlim(t_launch - 0.5, t_launch + 6.0)
+    # plt.ylim(-.2, 3.0)
+    # plt.title("IMU Health Check (Lift Phase Clipping)")
+    # plt.ylabel("m/s^2")
+    # plt.legend()
+    # plt.grid(True)
+    # add_2d_plot_note("likely massive clip at launch", x=0.03)
+    # plt.savefig(f"{plot_directory}/acceleration-clipping-plot.pdf")
+    # plt.show()
 
     # 4. COG CORRECTION where CoG and Center-of-rotation coincide
     # For a tumbling ball, use the full 3D rigid body correction
@@ -280,29 +278,32 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     print(f"Sensor offset: {sensor_offset:.3f} m, (should be 0.102 m for 4in on an 8in shell)")
     ax_cg, ay_cg, az_cg = cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp_f)
 
-    # 5. CONVERT TO WORLD FRAME INERTIAL TRANSFORM
-    ax_I = np.zeros_like(time_f)
-    ay_I = np.zeros_like(time_f)
-    az_I = np.zeros_like(time_f)
+    ax_final, ay_final, az_final = ax_cg, ay_cg, az_cg
 
-    for i in range(len(time_f)):
-        a_body = [ax_cg[i], ay_cg[i], az_cg[i]]
-        a_world = quaternion_rotate(quaternion_conjugate(quat_f[i]), a_body)
-        ax_I[i], ay_I[i], az_I[i] = a_world
-
-    az_I += G_EARTH
-
-    print("Vertical accel mean:", np.mean(az_I))
-    print("Vertical accel std:", np.std(az_I))
-
-    # Body-frame acceleration at CoG (gravity already removed)
-    ax_final = ax_cg
-    ay_final = ay_cg
-    az_final = az_cg
-
-    # Vertical acceleration (sensor Z mapped to inertial Z)
-    # TODO CHECK Inertial Z is vertical and Quaternion is Earth-aligned
-    a_vertical = az_I
+    # # 5. CONVERT TO WORLD FRAME INERTIAL TRANSFORM
+    # ax_I = np.zeros_like(time_f)
+    # ay_I = np.zeros_like(time_f)
+    # az_I = np.zeros_like(time_f)
+    #
+    # for i in range(len(time_f)):
+    #     a_body = [ax_cg[i], ay_cg[i], az_cg[i]]
+    #     a_world = quaternion_rotate(quaternion_conjugate(quat_f[i]), a_body)
+    #     ax_I[i], ay_I[i], az_I[i] = a_world
+    #
+    #
+    # print("Vertical accel mean:", np.mean(az_I))
+    # print("Vertical accel std:", np.std(az_I))
+    #
+    # # Body-frame acceleration at CoG (gravity already removed)
+    # ax_final = ax_cg
+    # ay_final = ay_cg
+    # az_final = az_cg
+    #
+    # # Vertical acceleration (sensor Z mapped to inertial Z)
+    # # TODO CHECK Inertial Z is vertical and Quaternion is Earth-aligned
+    # a_vertical = az_I
 
     print(f"--- NINE DOF Processing END")
-    return time_f, ax_final, ay_final, az_final, a_vertical, quat_f, t_launch, t_land
+    #return time_f, ax_final, ay_final, az_final, a_vertical, quat_f, t_launch, t_land
+    return time_f, ax_final, ay_final, az_final, quat_f, t_launch, t_land
+
