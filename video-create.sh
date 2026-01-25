@@ -3,6 +3,7 @@
 
 # Input Paths
 VIDEO_DIR="video"
+# Debug for 9 DOF
 #VIDEO_DIR="video-9-dof"
 FRAME_SOURCE_DIR="$HOME/Downloads"
 FRAME_PATTERN="frame_%04d.png"
