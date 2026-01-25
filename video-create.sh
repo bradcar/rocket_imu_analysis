@@ -1,16 +1,31 @@
 #!/bin/bash
 # run in analysis.py directory
 
-# Vpython puts scenes to browser and can only put frame images in download due to security
-mkdir -p frames && mv ~/Downloads/frame_*.png video/
+# Input Paths
+VIDEO_DIR="video"
+#VIDEO_DIR="video-9-dof"
+FRAME_SOURCE_DIR="$HOME/Downloads"
+FRAME_PATTERN="frame_%04d.png"
 
-# Video name
+# Output path
 VIDEO_NAME="rocket-trajectory-poc.mp4"
+
+# Ensure video directory exists
+mkdir -p "$VIDEO_DIR"
+
+# Move frames from source to video directory
+mv "$FRAME_SOURCE_DIR"/frame_*.png "$VIDEO_DIR"/
+
 # ffmpeg can assemble these frames to video
-ffmpeg -framerate 2 -i video/frame_%04d.png -c:v libx264 -pix_fmt yuv420p video/$VIDEO_NAME
+ffmpeg -framerate 2 \
+       -i "$VIDEO_DIR/$FRAME_PATTERN" \
+       -c:v libx264 \
+       -pix_fmt yuv420p \
+       "$VIDEO_DIR/$VIDEO_NAME"
 
-# Mac open defaults to Quicktime  (current for Brad's Mac)
-open video/$VIDEO_NAME
+# Open video (QuickTime on macOS)
+open "$VIDEO_DIR/$VIDEO_NAME"
 
-# if need to clean up frames in download
+# Optional cleanup
+# rm "$FRAME_SOURCE_DIR"/frame_0*.png
 # rm ~/Downloads/frame_0*.png

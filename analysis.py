@@ -135,6 +135,7 @@ import numpy as np
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.animate_projectile import animate_projectile
 from mylib.quaternion_functions import quaternion_rotate
+from mylib.read_prepare_6_dof import read_prepare_6_dof
 from mylib.read_prepare_9_dof import read_prepare_9_dof_shell
 
 # use fp64 prints thoughout
@@ -227,15 +228,14 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, t_land
 # ANALYSIS OF IMU FLIGHT DATA - 9 DoF and 6 DoF processing
 
 
-"""
 # Read and prepare 6 DOF sensor data to create Fused results
 plot_directory = "plots"
 os.makedirs(plot_directory, exist_ok=True)
 
 filename = "raw_input_data/launch_data.txt"
 time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_6_dof(filename, plot_directory)
-"""
 
+"""
 # TODO: DEBUG
 #  Read and prepare 9 DOF sensor data Fused results, CoG correction assumes spherical shell
 plot_directory = "plots-9-dof"
@@ -246,7 +246,7 @@ sensor_cm_offset = 0.0  # ~10cm for 4" for 8" shell
 time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_9_dof_shell(filename,
                                                                                                  plot_directory,
                                                                                                  sensor_cm_offset)
-
+"""
 # --- 1. INERTIAL TRANSFORM with Gravity removed
 ax_I, ay_I, az_I = body_to_inertial_acceleration(time_f, ax_final, ay_final, az_final, quat)
 

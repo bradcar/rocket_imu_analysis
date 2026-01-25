@@ -3,6 +3,7 @@
 Animate projectile with vpython
 """
 
+import math
 import os
 
 from vpython import sphere, box, arrow, color, rate, scene, label, vector
@@ -49,8 +50,23 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     scene.userspin = True  # Allows you to rotate, but won't move automatically
 
     # Camera settings
-    scene.camera.pos = vector(-265, -290, 47)
-    scene.camera.axis = vector(265, 290, 130)
+
+    camera_yaw = math.radians(10)  # 10 degrees off x-axis
+    camera_distance = 380
+    camera_height = 60
+
+    scene.camera.pos = vector(
+        -camera_distance * math.sin(camera_yaw),  # small X
+        -camera_distance * math.cos(camera_yaw),  # mostly Y
+        camera_height
+    )
+
+    scene.camera.axis = vector(
+        camera_distance * math.sin(camera_yaw),
+        camera_distance * math.cos(camera_yaw),
+        110
+    )
+
     scene.up = vector(0, 0, 1)
 
     # World Reference orintation
@@ -74,9 +90,9 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
 
     # Rocket Arrows
     arrow_scale = 25
-    arrow_body_x = arrow(pos=rocket.pos, axis=arrow_scale * world_x, shaftwidth=3.0, color=color.red)
-    arrow_body_y = arrow(pos=rocket.pos, axis=arrow_scale * world_y, shaftwidth=3.0, color=color.green)
-    arrow_body_z = arrow(pos=rocket.pos, axis=arrow_scale * world_z, shaftwidth=3.0, color=color.blue)
+    arrow_body_x = arrow(pos=rocket.pos, axis=arrow_scale * world_x, shaftwidth=2.0, color=color.red)
+    arrow_body_y = arrow(pos=rocket.pos, axis=arrow_scale * world_y, shaftwidth=2.0, color=color.green)
+    arrow_body_z = arrow(pos=rocket.pos, axis=arrow_scale * world_z, shaftwidth=2.0, color=color.blue)
 
     # Numerical simulation quantity display of Altitude, timestamp, and velocity
     data_label = label(pos=vector(100, -50, 25), text="", color=color.black, box=True, background=vector(0.9, 0.9, 0.9),
@@ -143,10 +159,11 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
         )
 
         # Trail effect: red/thick during thrust, yellow/thin during coast
+        # But there are high acceration events, likely chute pyro near apogee
         if ax_f[i] > 0.5:
         #if flight_time < 4 and ax_f[i] > 0.5:
             rocket.trail_color = color.red
-            rocket.trail_radius = 2.0
+            rocket.trail_radius = 1.5
         else:
             rocket.trail_color = color.yellow
             rocket.trail_radius = 0.5
