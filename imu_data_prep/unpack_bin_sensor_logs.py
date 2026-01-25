@@ -147,12 +147,13 @@ def ascii_histogram(data):
     # 100ms samples
     bin_min = 0.0
     bin_max = 200.0
+    bin_width = 20.0
 
-    bins = np.arange(bin_min,  bin_max, 20 + 1)
+    bins = np.arange(bin_min,  bin_max+bin_width, bin_width)
     counts, _ = np.histogram(data, bins=bins)
 
     # overflow (>10.0)
-    overflow = np.sum(data > bin_max - 1.0)
+    overflow = np.sum(data > bin_max)
 
     # limit histogram lenth
     max_width = 50
@@ -168,10 +169,12 @@ def ascii_histogram(data):
 
     # print histogram
     for i, count in enumerate(counts):
-        label = f"{bins[i]:>4.1f}–{bins[i] + 1:>4.1f} ({count:5d})"
+        left = bins[i]
+        right = bins[i + 1]
+        label = f"{left:5.1f}–{right:5.1f} ({count:5d})"
         print(f"{label} | {bar(count)}")
 
-    print(f"    >{bin_max - 1.0} ({overflow:5d}) | {bar(overflow)}")
+    print(f"     >{bin_max} ({overflow:5d}) | {bar(overflow)}")
 
 
 def print_summary(data):
