@@ -1,6 +1,7 @@
 # unpack_bin_sensor_logs.py
 """
 # Unpacks Bin Sensor Logs created by log_linacc_quat_gyro_flash_spi.py
+# CAUTION: CSV IS CONVERTED TO SECONDS from msec
 #
 # Unpacks both styles of writes:
 # 1. simple whole file where rows are contiguous
@@ -12,47 +13,44 @@
 # Sensor msec/Lin_Acc = 5.08 ms
 # Clock msec/Lin_Acc  = 5.06 ms
 #
-# Writing data in sector chunks to flash in 4096 sectors with flush no CRC
-# Array each result for 1000 rows:
-# sensor timestamps last_sensor_ms=11931.5 first_sensor_ms=5724.8  sensor duration: 6.2 s
-# Sensor msec/reports = 6.21 ms
-# Clock msec/reports  = 6.28 ms
-# BYTES_PER_ROW=44, data size = 44000 bytes
-# Array = 43.0 KiB, xfer = 6.8 KiB/s
-#
-# Writing data in sector chunks to flash in 4096 sectors with flush WITH CRC
-# Array each result for 1000 rows:
-# sensor timestamps last_sensor_ms=11997.0 first_sensor_ms=5785.0  sensor duration: 6.2 s
-# Sensor msec/reports = 6.21 ms
-# Clock msec/reports  = 6.29 ms
-# BYTES_PER_ROW=44, data size = 44000 bytes
-# Array = 43.0 KiB, xfer = 6.8 KiB/s
 
---- Decoding Whole Buffer File: sensor_log.bin
-Decoded 1000 rows
-Header: ['ts_ms', 'ax', 'ay', 'az', 'qr', 'qi', 'qj', 'qk', 'gy', 'gp', 'gr']
-Data: [np.float32(657.6), np.float32(-0.0039), np.float32(0.0234), np.float32(-0.0078), np.float32(1.0), np.float32(0.0), np.float32(0.0), np.float32(0.0), np.float32(0.0), np.float32(-0.0117), np.float32(0.0059)]
-Data: [np.float32(679.1), np.float32(0.1562), np.float32(0.1289), np.float32(0.1719), np.float32(1.0), np.float32(0.0), np.float32(-1e-04), np.float32(0.0), np.float32(0.0059), np.float32(-0.002), np.float32(0.0039)]
-Data: [np.float32(683.0), np.float32(0.125), np.float32(0.1328), np.float32(0.1758), np.float32(0.9996), np.float32(0.0217), np.float32(-0.0167), np.float32(-0.0004), np.float32(0.0059), np.float32(-0.0098), np.float32(0.0)]
-Data: [np.float32(688.4), np.float32(0.1406), np.float32(0.1445), np.float32(0.1836), np.float32(0.9996), np.float32(0.0217), np.float32(-0.0168), np.float32(-0.0004), np.float32(-0.002), np.float32(-0.0176), np.float32(0.0039)]
-Data: [np.float32(693.0), np.float32(0.1836), np.float32(0.1641), np.float32(0.1836), np.float32(0.9996), np.float32(0.0218), np.float32(-0.0169), np.float32(-0.0004), np.float32(0.0), np.float32(-0.0195), np.float32(0.0)]
-	Average Data Freq: 197.59 Hz
-	Average time step: 5.06 ms
-	Min/Max interval: 1.70 / 28.00 ms
-	Std Dev: 1.30 ms, jitter: 25.7%
+Sector-formatted data has delays caused by sector writes & flushes
 
---- Decoding Sector Buffer File (CRC Verified): flight_log_2026xxxx_xpm_sector.bin
-Decoded 1000 rows. (Corrupt blocks: 0)
-Header: ['ts_ms', 'ax', 'ay', 'az', 'qr', 'qi', 'qj', 'qk', 'gy', 'gp', 'gr']
-Data: [np.float32(6248.0), np.float32(0.0039), np.float32(0.0117), np.float32(0.0195), np.float32(0.9992), np.float32(0.0294), np.float32(-0.027), np.float32(-0.0002), np.float32(0.0), np.float32(0.0), np.float32(0.0)]
-Data: [np.float32(6265.2), np.float32(0.0039), np.float32(0.0117), np.float32(0.0195), np.float32(0.9992), np.float32(0.0294), np.float32(-0.027), np.float32(-0.0002), np.float32(0.0), np.float32(0.0), np.float32(0.0)]
-Data: [np.float32(6269.4), np.float32(0.0), np.float32(-0.0312), np.float32(0.0), np.float32(0.9992), np.float32(0.0294), np.float32(-0.027), np.float32(-0.0002), np.float32(0.0), np.float32(0.0), np.float32(0.0)]
-Data: [np.float32(6275.0), np.float32(0.043), np.float32(0.0234), np.float32(0.0078), np.float32(0.9992), np.float32(0.0294), np.float32(-0.027), np.float32(-0.0002), np.float32(0.0), np.float32(0.0), np.float32(0.0)]
-Data: [np.float32(6280.0), np.float32(-0.0039), np.float32(0.0039), np.float32(-0.0117), np.float32(0.9992), np.float32(0.0294), np.float32(-0.027), np.float32(-0.0002), np.float32(0.0), np.float32(0.0), np.float32(0.0)]
-	Average Data Freq: 167.68 Hz
-	Average time step: 5.96 ms
-	Min/Max interval: 2.90 / 108.70 ms
-	Std Dev: 8.08 ms, jitter: 135.5%
+Decoded 1000 rows, FILE OK, No Corrupt blocks: 0)
+	Header: ['ts_ms', 'ax', 'ay', 'az', 'qr', 'qi', 'qj', 'qk', 'gy', 'gp', 'gr']
+	Data: [6274.5000, 0.0195, -0.0156, 0.0117, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
+	Data: [6295.7002, 0.0195, -0.0156, 0.0117, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
+	Data: [6301.0000, -0.0273, 0.0000, -0.0078, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
+	Data: [6306.7998, 0.0000, -0.0117, 0.0195, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
+	Data: [6311.0000, 0.0312, 0.0039, 0.0273, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
+
+Average Data Freq: 164.63 Hz
+	Average time step: 6.07 ms
+	Min/Max interval: 1.50 / 105.50 ms
+	Std Dev: 8.62 ms, jitter: 141.9%
+
+Histogram of report periods (ms):
+ 0.0– 1.0 (    0) |
+ 1.0– 2.0 (    4) | #
+ 2.0– 3.0 (   10) | #
+ 3.0– 4.0 (   41) | ####
+ 4.0– 5.0 (  385) | ##########################################
+ 5.0– 6.0 (  457) | ##################################################
+ 6.0– 7.0 (   58) | ######
+ 7.0– 8.0 (    6) | #
+ 8.0– 9.0 (    7) | #
+ 9.0–10.0 (    2) | #
+10.0–11.0 (    4) | #
+11.0–12.0 (    2) | #
+12.0–13.0 (    0) |
+13.0–14.0 (    0) |
+14.0–15.0 (    0) |
+15.0–16.0 (    0) |
+16.0–17.0 (    1) | #
+17.0–18.0 (    0) |
+18.0–19.0 (    0) |
+19.0–20.0 (    0) |
+    >20.0 (   22) | ##
 """
 import binascii
 import os
@@ -134,7 +132,50 @@ def decode_sector_buffer(filename):
     return data
 
 
+def ascii_histogram(data):
+    """
+    prints horizontal ascii histogram showing counts and scaled where longest bar is set by max_width.
+    :param data:
+    :return:
+    """
+
+    # 5ms samples
+    # define bins: 0.0–1.0, 1.0–2.0, ..., 9.0–10.0, >10.0
+    bin_min = 0.0
+    bin_max = 21.0
+
+    # 100ms samples
+    bin_min = 0.0
+    bin_max = 200.0
+
+    bins = np.arange(bin_min,  bin_max, 20 + 1)
+    counts, _ = np.histogram(data, bins=bins)
+
+    # overflow (>10.0)
+    overflow = np.sum(data > bin_max - 1.0)
+
+    # limit histogram lenth
+    max_width = 50
+    all_counts = np.append(counts, overflow)
+    max_count = all_counts.max()
+    scale = max_width / max_count if max_count > 0 else 1.0
+
+    def bar(n):
+        """ string of bar lengths, at least 1 for non-zero counts """
+        if n == 0:
+            return ""
+        return "#" * max(1, int(round(n * scale)))
+
+    # print histogram
+    for i, count in enumerate(counts):
+        label = f"{bins[i]:>4.1f}–{bins[i] + 1:>4.1f} ({count:5d})"
+        print(f"{label} | {bar(count)}")
+
+    print(f"    >{bin_max - 1.0} ({overflow:5d}) | {bar(overflow)}")
+
+
 def print_summary(data):
+    """ print sample of first rows, and print timestamp statistics with ascii histogram"""
     if data.size == 0:
         print("No data")
         return
@@ -160,6 +201,9 @@ def print_summary(data):
     print(f"\tMin/Max interval: {dt_min:.2f} / {dt_max:.2f} ms")
     print(f"\tStd Dev: {dt_std:.2f} ms, jitter: {(dt_std / dt_avg) * 100:.1f}%")
 
+    print("\nHistogram of report periods (ms):")
+    ascii_histogram(deltas)
+
 
 def write_csv(filename, data, precision=7):
     """ Write sensor data to CSV"""
@@ -167,8 +211,13 @@ def write_csv(filename, data, precision=7):
         print(f"No data to write: {filename}")
         return
 
-    header = ["ts_ms", "ax", "ay", "az", "qr", "qi", "qj", "qk", "gy", "gp", "gr", ]
-    fmt = ["%.1f"] + [f"%.{precision}f"] * (data.shape[1] - 1)
+    header = ["SECONDS", "ax", "ay", "az", "qr", "qi", "qj", "qk", "gy", "gp", "gr", ]
+    fmt = ["%.4f"] + [f"%.{precision}f"] * (data.shape[1] - 1)
+
+    print("\n*** WARNING: CSV is converted to SECONDS, above processing in msec")
+    data = np.array(data, copy=True)
+    time_ms = data[:, 0].copy()
+    data[:, 0] = time_ms / 1000.0
 
     np.savetxt(filename, data, delimiter=",", header=",".join(header), comments="", fmt=fmt)
 
@@ -177,19 +226,23 @@ def write_csv(filename, data, precision=7):
 
 # Main #############################################
 def main():
-
-    # Convert Whole Data formatted file
+    # Convert Whole-Data-formatted file
     filename = "data_logs/flight_log_2026xxxx_xpm_whole.bin"
     if os.path.exists(filename):
-        raw_data = decode_whole_buffer(filename)
-        print_summary(raw_data)
+        whole_data = decode_whole_buffer(filename)
+        print_summary(whole_data)
+        write_csv(filename.replace(".bin", ".csv"), whole_data)
+    else:
+        print(f"\nFile {filename} does not exist")
 
-    # Conver Sector-formatted file
+    # Convert Sector-formatted file
     filename = "data_logs/flight_log_2026xxxx_xpm_sector.bin"
     if os.path.exists(filename):
         sector_data = decode_sector_buffer(filename)
         print_summary(sector_data)
         write_csv(filename.replace(".bin", ".csv"), sector_data)
+    else:
+        print(f"\nError: File {filename} does not exist")
 
 
 if __name__ == "__main__":
