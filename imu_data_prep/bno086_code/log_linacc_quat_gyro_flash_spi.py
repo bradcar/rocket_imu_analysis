@@ -30,6 +30,7 @@ import gc
 import os
 import struct
 
+from array import array
 from bno08x import *
 from machine import SPI, Pin
 from spi import BNO08X_SPI
@@ -255,6 +256,59 @@ def write_results_by_sector(bno, rows: int, filename: str):
     print(f"{BYTES_PER_ROW=}, data size = {(rows * BYTES_PER_ROW)} bytes")
     kbytes = (BYTES_PER_ROW * rows) / 1024
     print(f"Array = {kbytes:.1f} KiB, xfer = {kbytes / (pico_ms / 1000.0):.1f} KiB/s")
+ 
+ 
+def ascii_histogram(data, bins=15, max_width=40):
+    """
+    Automatically bins data based on min/max and prints an ASCII histogram.
+    Works with numpy arrays or standard lists.
+    """
+    if len(data) == 0:
+        print("No data to histogram.")
+        return
+
+    d_min, d_max = min(data), max(data)
+    
+    # If all data is identical (e.g., all 0.0), create a small range to avoid division by zero
+    if d_min == d_max:
+        d_max += 0.1
+
+    # Calculate bin edges and counts
+    bin_width = (d_max - d_min) / bins
+    counts = [0] * bins
+    
+    for val in data:
+        # Calculate which bin the value belongs to
+        idx = int((val - d_min) / bin_width)
+        if idx == bins: # Handle maximum value
+            idx -= 1
+        counts[idx] += 1
+
+    # Scale bars
+    max_count = max(counts)
+    scale = max_width / max_count if max_count > 0 else 1.0
+
+    print(f"\nHistogram (Range: {d_min:.6f} to {d_max:.6f})")
+    print("-" * (max_width + 35))
+    
+    for i in range(bins):
+        b_start = d_min + (i * bin_width)
+        b_end = b_start + bin_width
+        
+        bar_len = int(counts[i] * scale)
+        bar = "#" * bar_len
+        
+        # Print row: Range | Count | Bar
+        print(f"{b_start:10.6f} to {b_end:10.6f} | {counts[i]:5d} | {bar}")
+
+def get_median(data):
+    """Simple median for array.array or list"""
+    sorted_data = sorted(data)
+    n = len(sorted_data)
+    if n % 2 == 1:
+        return sorted_data[n // 2]
+    else:
+        return (sorted_data[n // 2 - 1] + sorted_data[n // 2]) / 2
 
 
 def get_static_bias(bno, samples=100):
@@ -264,32 +318,55 @@ def get_static_bias(bno, samples=100):
     global AX_BIAS, AY_BIAS, AZ_BIAS, GY_BIAS, GP_BIAS, GR_BIAS
 
     print(f"Calculating static bias from {samples} samples.")
-    print("* DO NOT MOVE SENSOR...")
+    print("\n* DO NOT MOVE SENSOR...")
     sum_ax, sum_ay, sum_az = 0.0, 0.0, 0.0
     sum_gy, sum_gp, sum_gr = 0.0, 0.0, 0.0
+    
+    ax = array('f', [0.0] * samples)
+    ay = array('f', [0.0] * samples)
+    az = array('f', [0.0] * samples)
+    gy = array('f', [0.0] * samples)
+    gp = array('f', [0.0] * samples)
+    gr = array('f', [0.0] * samples)
 
-    count = 0
-    while count < samples:
+    idx = 0
+    while idx < samples:
         bno.update_sensors()
         if bno.linear_acceleration.updated:
-            ax, ay, az = bno.linear_acceleration
-            gy, gp, gr = bno.gyro
-            sum_ax += ax
-            sum_ay += ay
-            sum_az += az
-            sum_gy += gy
-            sum_gp += gp
-            sum_gr += gr
-            count += 1
 
-    # Save average bias error for each axis
-    AX_BIAS = sum_ax / samples
-    AY_BIAS = sum_ay / samples
-    AZ_BIAS = sum_az / samples
-    GY_BIAS = sum_gy / samples
-    GP_BIAS = sum_gp / samples
-    GR_BIAS = sum_gr / samples
+            new_ax, new_ay, new_az = bno.linear_acceleration
+            new_gy, new_gp, new_gr = bno.gyro
+            
+            # Store in float arrays
+            ax[idx], ay[idx], az[idx] = new_ax, new_ay, new_az
+            gy[idx], gp[idx], gr[idx] = new_gy, new_gp, new_gr
+            
+            idx += 1
+    
+    # There can be significant outliers, using median instead of average
+    AX_BIAS = get_median(ax)
+    AY_BIAS = get_median(ay)
+    AZ_BIAS = get_median(az)
+    GY_BIAS = get_median(gy)
+    GP_BIAS = get_median(gp)
+    GR_BIAS = get_median(gr)
+        
+    print("\nascii Histograms of Acceleration Biases (m/s²):")
+    print(f"\nbias will use median(ax) = {AX_BIAS:.7f}")
+    ascii_histogram(ax, bins=15)
+    print(f"\nbias will use median(ay) = {AY_BIAS:.7f}")
+    ascii_histogram(ay, bins=15)
+    print(f"\nbias will use median(az) = {AZ_BIAS:.7f}")
+    ascii_histogram(az, bins=15)
 
+    print("\nascii Histograms of Gyroscope Biases (rad/s):")
+    print(f"\nbias will use median(gy) = {GY_BIAS:.7f}")
+    ascii_histogram(gy, bins=15)
+    print(f"\nbias will use median(gp) = {GP_BIAS:.7f}")
+    ascii_histogram(gp, bins=15)
+    print(f"\nbias will use median(gr) = {GP_BIAS:.7f}")
+    ascii_histogram(gr, bins=15)
+    
 
 def sensor_calibration(bno, stable_sec):
     """ Sensor calibration, must be stable for stable_sec. TODO no max for timeout
@@ -381,8 +458,8 @@ def main():
 
     # Calculate Sensor Bias DO Not move sensor
     print("\nStarting Bias calibration...")
-    get_static_bias(bno, samples=5 * update_frequency)
-    print(f"Static Acceleration Biases: {AX_BIAS=:+.6f}, {AX_BIAS=:+.6f}, {AX_BIAS=:+.6f}")
+    get_static_bias(bno, samples=10 * update_frequency)
+    print(f"\nStatic Acceleration Biases: {AX_BIAS=:+.6f}, {AY_BIAS=:+.6f}, {AZ_BIAS=:+.6f}")
     print(f"Static Gyro Biases:         {GY_BIAS=:+.6f}, {GP_BIAS=:+.6f}, {GR_BIAS=:+.6f}")
 
     # Log results 
