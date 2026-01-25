@@ -1,7 +1,7 @@
 # Linear_acceleration, Quaternion, Gyro logging to flash BNO08x MicroPython SPI
 #
 # CAUTION: TIME IN msec NOT SECONDS, for BNO efficiency
-# CAUTION: CSV IS CONVERTED TO SECONDS
+# CAUTION: CSV IS CONVERTED TO SECONDS in unpack_bin_sensor_logs.py
 #
 # Reading Linear_Acc for 1000 rows, doing nothing with output
 # sensor timestamps last_sensor_ms=5724.8 first_sensor_ms=644.9  sensor duration: 5.1 s
@@ -44,6 +44,14 @@ ROWS_PER_SECTOR = const(93)
 DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4092 = 44 * 93
 SECTOR_SIZE = const(4096)  # Exactly 4 KiB
 
+# GLOBALS for Bias Correction
+AX_BIAS = 0.0
+AY_BIAS = 0.0
+AZ_BIAS = 0.0
+GY_BIAS = 0.0
+GP_BIAS = 0.0
+GR_BIAS = 0.0
+
 
 def write_results_whole_batch(bno, rows: int, filename: str):
     """
@@ -51,7 +59,7 @@ def write_results_whole_batch(bno, rows: int, filename: str):
     for high-frequency updates (5 ms) with little jitter.
     
     Low jitter, but limited to only 95 KiB in-memory storage.
-    This function usefor for simple tests, but for practical use use sector-format version.
+    This function usefor for simple tests, typically use sector-format version.
 
     :param bno:
     :param rows:
@@ -74,15 +82,19 @@ def write_results_whole_batch(bno, rows: int, filename: str):
     if required_buffer_size > (free_heap_size - SAFETY_MARGIN):
         raise MemoryError(
             "Whole-batch buffer too large: "
-            f"need {required_buffer_size/1024.0:.1f} KiB, have {(free_heap_size - SAFETY_MARGIN)/1024.0:.1f} KiB free. "
+            f"need {required_buffer_size / 1024.0:.1f} KiB, have {(free_heap_size - SAFETY_MARGIN) / 1024.0:.1f} KiB free. "
             f"Max rows={(free_heap_size - SAFETY_MARGIN) / BYTES_PER_ROW:.0f} "
             "Use sector-based logging instead."
         )
     else:
-        percent_memory =(required_buffer_size/free_heap_size)*100.0
+        percent_memory = (required_buffer_size / free_heap_size) * 100.0
         print(f"Memory used for buffer: {percent_memory:.0f}%")
 
     buffer = bytearray(required_buffer_size)
+
+    # localize globals for effiency
+    ax_offset, ay_offset, az_offset = AX_BIAS, AY_BIAS, AZ_BIAS
+    gy_offset, gp_offset, gr_offset = GY_BIAS, GP_BIAS, GR_BIAS
 
     update = bno.update_sensors
     pack_into = struct.pack_into
@@ -106,7 +118,11 @@ def write_results_whole_batch(bno, rows: int, filename: str):
                 first_sensor_ms = ts_ms
 
             offset = i * BYTES_PER_ROW
-            pack_into(pack_string, buffer, offset, ts_ms, ax, ay, az, qr, qi, qj, qk, gy, gp, gr)
+            pack_into(pack_string, buffer, offset,
+                      ts_ms,
+                      ax - ax_offset, ay - ay_offset, az - az_offset,
+                      qr, qi, qj, qk,
+                      gy - gy_offset, gp - gp_offset, gr - gr_offset, )
 
             i += 1
 
@@ -125,7 +141,7 @@ def write_results_whole_batch(bno, rows: int, filename: str):
         f.write(buffer)  # Write whole buffer 44,000 bytes
         f.flush()
         os.sync()
-    
+
     kbytes = len(buffer) / 1024.0
     secs = ticks_diff(ticks_ms(), write_start) / 1000.0
     print(f"Time to write {kbytes} KiB, time = {secs} s, xfer = {(kbytes / secs):.1f} KiB/s")
@@ -145,6 +161,8 @@ def write_results_by_sector(bno, rows: int, filename: str):
     :param filename:
     :return:
     """
+    global AX_BIAS, AY_BIAS, AZ_BIAS, GY_BIAS, GP_BIAS, GR_BIAS
+
     # Time Packing data into a 4 KiB buffer & writing sectors for flash
     print("\nWriting data to Flash in 4 KiB sector chunks to flash")
 
@@ -154,6 +172,10 @@ def write_results_by_sector(bno, rows: int, filename: str):
 
     # Buffer of exactly 4 KiB, data: 4092 CRC: last 4 bytes
     sector_buffer = bytearray(SECTOR_SIZE)
+
+    # localize globals for effiency
+    ax_offset, ay_offset, az_offset = AX_BIAS, AY_BIAS, AZ_BIAS
+    gy_offset, gp_offset, gr_offset = GY_BIAS, GP_BIAS, GR_BIAS
 
     update = bno.update_sensors
     pack_into = struct.pack_into
@@ -185,7 +207,10 @@ def write_results_by_sector(bno, rows: int, filename: str):
                     # Pack ONLY into the sector buffer
                     offset = sector_row_count * BYTES_PER_ROW
                     pack_into(pack_string, sector_buffer, offset,
-                              ts_ms, ax, ay, az, qr, qi, qj, qk, gy, gp, gr)
+                              ts_ms,
+                              ax - ax_offset, ay - ay_offset, az - az_offset,
+                              qr, qi, qj, qk,
+                              gy - gy_offset, gp - gp_offset, gr - gr_offset, )
 
                     sector_row_count += 1
                     i += 1
@@ -231,6 +256,41 @@ def write_results_by_sector(bno, rows: int, filename: str):
     kbytes = (BYTES_PER_ROW * rows) / 1024
     print(f"Array = {kbytes:.1f} KiB, xfer = {kbytes / (pico_ms / 1000.0):.1f} KiB/s")
 
+
+def get_static_bias(bno, samples=100):
+    """
+    Calculate residual bias whilee sensor stable. Do this for number of 'samples'
+    """
+    global AX_BIAS, AY_BIAS, AZ_BIAS, GY_BIAS, GP_BIAS, GR_BIAS
+
+    print(f"Calculating static bias from {samples} samples.")
+    print("* DO NOT MOVE SENSOR...")
+    sum_ax, sum_ay, sum_az = 0.0, 0.0, 0.0
+    sum_gy, sum_gp, sum_gr = 0.0, 0.0, 0.0
+
+    count = 0
+    while count < samples:
+        bno.update_sensors()
+        if bno.linear_acceleration.updated:
+            ax, ay, az = bno.linear_acceleration
+            gy, gp, gr = bno.gyro
+            sum_ax += ax
+            sum_ay += ay
+            sum_az += az
+            sum_gy += gy
+            sum_gp += gp
+            sum_gr += gr
+            count += 1
+
+    # Save average bias error for each axis
+    AX_BIAS = sum_ax / samples
+    AY_BIAS = sum_ay / samples
+    AZ_BIAS = sum_az / samples
+    GY_BIAS = sum_gy / samples
+    GP_BIAS = sum_gp / samples
+    GR_BIAS = sum_gr / samples
+
+
 def sensor_calibration(bno, stable_sec):
     """ Sensor calibration, must be stable for stable_sec. TODO no max for timeout
     :param bno:
@@ -259,7 +319,7 @@ def sensor_calibration(bno, stable_sec):
         _, _, _, gyro_accuracy, _ = bno.gyro.full
         _, _, _, _, quat_accuracy, _ = bno.quaternion.full
 
-        if all(x >= 2 for x in (accel_accuracy,  gyro_accuracy, quat_accuracy)):
+        if all(x >= 2 for x in (accel_accuracy, gyro_accuracy, quat_accuracy)):
             status = "All Sensors >= 2"
             calibration_good = True
         else:
@@ -312,22 +372,33 @@ def main():
     bno.print_report_period()
     print("BNO08x sensors enabled\n")
 
-    # --- Check Calibration
-    # CAUTION this will NOT time out if inaccurate
+    # Check Calibration
+    # CAUTION: this will NOT time out if inaccurate
     sensor_calibration(bno, stable_sec=3)
 
-    # --- Log results - TWO Options - typically chose one
+    print("\nSleeping for 5 sec - Make sure sensor still for Bias calibration")
+    sleep_ms(5000)
+
+    # Calculate Sensor Bias DO Not move sensor
+    print("\nStarting Bias calibration...")
+    get_static_bias(bno, samples=5 * update_frequency)
+    print(f"Static Acceleration Biases: {AX_BIAS=:+.6f}, {AX_BIAS=:+.6f}, {AX_BIAS=:+.6f}")
+    print(f"Static Gyro Biases:         {GY_BIAS=:+.6f}, {GP_BIAS=:+.6f}, {GR_BIAS=:+.6f}")
+
+    # Log results 
 
     # 5ms sample period generate 200 rows/sec
     duration_seconds = 20
     rows = duration_seconds * update_frequency
-    print(f"{duration_seconds=}, {rows=}, {update_frequency=}Hz,")
+    print(f"\nSensor Collection: {duration_seconds=}, {rows=}, {update_frequency=}Hz,")
 
-    # Buffer all data before writes - limited to 95 KiB logs
+    # --- TWO WRITE-TO-FLASH Options - TODO CHOOSE ONE
+
+    # OPTION 1: Buffer all data in memory before writing to Flash - limited to 95 KiB logs
     filename = "flight_log_2026xxxx_xpm_whole.bin"
     write_results_whole_batch(bno, rows, filename)
 
-    # Buffer Sectors, and write by sector. This will show jitter at sector writes.
+    # OPTION 2: Buffer 4 KiB Sector, then sector to flash. This will show jitter at sector writes.
     filename = "flight_log_2026xxxx_xpm_sector.bin"
     write_results_by_sector(bno, rows, filename)
 
