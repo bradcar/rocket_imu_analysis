@@ -5,6 +5,8 @@ import mylib.psd_functions as psd
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.quaternion_functions import quaternion_rotate, quaternion_conjugate
 
+G_EARTH = 9.80665  # m/s^2
+
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)
 
@@ -47,30 +49,37 @@ def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp
     return ax_cg, ay_cg, az_cg
 
 
-def read_prepare_9_dof_shell(raw_data_file, plot_directory):
+def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     """
     Reads raw 9 DOF IMU data for spherical shell,
     performs CoG translation where CoG and center-of-rotation align,
     and transforms accelerations into the inertial frame.
+    :param raw_data_file: filename of data file to analyze/simulate
+    :param plot_directory: output plot directory
+    :param sensor_cm_offset: cm's offset between sensor and center-of-gravity
     """
     # --- A. Load Quaternion, Linear Accelerometer (No Gravity), & Gyro
 
     # Using BNO086 22-byte packed format
-    data = np.loadtxt(raw_data_file).astype(np.float64)
+    # data = np.loadtxt(raw_data_file).astype(np.float64)
+
+    # read CSV file skip header
+    data = np.genfromtxt(raw_data_file, delimiter=",", dtype=np.float64, skip_header=1)
+    print("data read finished")
     time_raw = data[:, 0]
+
+    # Linear Accel (Gravity already removed by BNO086 hardware)
+    ax_lin, ay_lin, az_lin = data[:, 1], data[:, 2], data[:, 3]
 
     # TODO test re-map of Quaternion
     # BNO Quaternions: Hamiltonian (r, i, j, k)
     # Re-Mapping: X_new = -X_old, Y_new = Z_old, Z_new = Y_old
     q_raw = np.column_stack((
-        data[:, 0],  # qr Scalar is same)
-        -data[:, 1], # qi is Mapped to -X (roll)
-        data[:, 3],  # qj is Mapped to Z (yaw)
-        data[:, 2]   # qk is Mapped to Y (pitch)
+        data[:, 4],  # qr Scalar is same)
+        -data[:, 5],  # qi is Mapped to -X (roll)
+        data[:, 7],  # qj is Mapped to Z (yaw)
+        data[:, 6]  # qk is Mapped to Y (pitch)
     ))
-
-    # Linear Accel (Gravity already removed by BNO086 hardware)
-    ax_lin, ay_lin, az_lin = data[:, 5], data[:, 6], data[:, 7]
 
     # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
     # TODO CRITICAL check gyro orientation
@@ -79,6 +88,11 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     gp = data[:, 9]  # Pitch mapped to Z
 
     # --- B. Calculate Time Sampling Average interval (dt & freq)
+
+    print("Time range:", time_raw.min(), time_raw.max())
+    print("Accel raw sample:", ax_lin[:5], ay_lin[:5], az_lin[:5])
+    print("Quaternion sample:", q_raw[:5])
+
     deltas = np.diff(time_raw)
     dt_avg = np.mean(deltas)
     dt_min = np.min(deltas)
@@ -100,28 +114,43 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     # Jitter should be less than 2%
     print(f"\tStandard Dev: {dt_std * 1000:.1f} ms, jitter: {(dt_std / dt_avg) * 100:.0f}%")
 
-    # --- C. Launch/Land time Detection based on high acceleration
+    # --- C. Launch/Land time Detection based on high acceleration and truncate data if needed
+    t_launch_manual = None
     t_launch_manual = None
     t_land_manual = None
-    acceleration_mag = np.sqrt(ax_lin ** 2 + ay_lin ** 2 + az_lin ** 2)
-    t_launch = t_launch_manual if t_launch_manual else time_raw[np.where(acceleration_mag > 30.0)[0][0]]
-    t_land = t_land_manual if t_land_manual else time_raw[-1]  # Simplification
 
-    # 3. TRUNCATION
+    acceleration_mag = np.sqrt(ax_lin ** 2 + ay_lin ** 2 + az_lin ** 2)
+    acceleration_threshold = 100.0
+    idx = np.where(acceleration_mag > acceleration_threshold)[0]
+
+    if t_launch_manual is not None:
+        t_launch = t_launch_manual
+    elif idx.size == 0:
+        print(f"No launch spike detected (>{acceleration_threshold:.1f} m/s^2). Proceeding without truncation.")
+        t_launch = time_raw[0]
+    else:
+        t_launch = time_raw[idx[0]]
+
+    t_land = t_land_manual if t_land_manual is not None else time_raw[-1]
+
+    print(f"\tDetected Launch: {t_launch:.2f}s")
+    print(f"\tDetected Land: {t_land:.2f}s")
+    print(f"\tFlight Duration: {t_land - t_launch:.2f}s")
+
+    # --- D.  Hand-adjusted launch/land times
+    # TODO adjust as needed
+    # t_launch = 874.6
+    # t_land = 889.5
+    # print(f"\tAdjust Launch: {t_launch:.2f}s")
+    # print(f"\tAdjusted Land: {t_land:.2f}s")
+    # print(f"\tAdjusted Flight Duration: {t_land - t_launch:.2f}s")
+
+    # Truncate all data to the launch/land times
     mask = (time_raw > t_launch - 0.5) & (time_raw < t_land + 0.5)
     time_f = time_raw[mask]
     quat_f = q_raw[mask]
     ax_b, ay_b, az_b = ax_lin[mask], ay_lin[mask], az_lin[mask]
     gy_f, gp_f, gr_f = gy[mask], gp[mask], gr[mask]
-
-    # --- D.  Hand-adjusted launch/land times
-    # TODO adjust as needed
-    t_launch = 874.6
-    t_land = 889.5
-
-    print(f"\tDetected Launch: {t_launch:.2f}s")
-    print(f"\tDetected Land: {t_land:.2f}s")
-    print(f"\tFlight Duration: {t_land - t_launch:.2f}s")
 
     plt.figure(figsize=(10, 4))
     plt.plot(time_raw, acceleration_mag, label="Total Acceleration (acceleration_mag)", color="gray", alpha=1.0)
@@ -247,37 +276,24 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory):
     # 4. COG CORRECTION where CoG and Center-of-rotation coincide
     # For a tumbling ball, use the full 3D rigid body correction
     # Sensor position relative to CoG assuming CoG and center-rotation aligned, expressed in BODY frame
-    # +X body axis assumed 4 inches offset to meters
-    # TODO 4" offset is guess for 8" shell
-    inch_offset = 4
-    sensor_offset = inch_offset * 0.0254
+    sensor_offset = sensor_cm_offset / 1000.0
     print(f"Sensor offset: {sensor_offset:.3f} m, (should be 0.102 m for 4in on an 8in shell)")
     ax_cg, ay_cg, az_cg = cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp_f)
 
-    # 5. INERTIAL TRANSFORM
-    # We use the sensor's OWN quaternions to rotate the lin_accel to Inertial Frame
+    # 5. CONVERT TO WORLD FRAME INERTIAL TRANSFORM
     ax_I = np.zeros_like(time_f)
     ay_I = np.zeros_like(time_f)
     az_I = np.zeros_like(time_f)
 
     for i in range(len(time_f)):
-        # BNO086 provides Body -> Inertial orientation
-
-        # The BNO08x quaternion (quat_f) represents the orientation of the sensor.
-        # To rotate a vector from the Body frame to the Inertial frame with conjugate
-
-        # TODO CHECK orientation
-        q_body_to_inertial = quaternion_conjugate(quat_f[i])
-
-        # Define the acceleration vector at the CoG in the Body frame
         a_body = [ax_cg[i], ay_cg[i], az_cg[i]]
+        a_world = quaternion_rotate(quaternion_conjugate(quat_f[i]), a_body)
+        ax_I[i], ay_I[i], az_I[i] = a_world
 
-        # Perform the rotation: a_I = q * a_b * q_inv
-        a_inertial = quaternion_rotate(q_body_to_inertial, a_body)
+    az_I += G_EARTH
 
-        # Unpack into Inertial arrays
-        ax_I[i], ay_I[i], az_I[i] = a_inertial
-
+    print("Vertical accel mean:", np.mean(az_I))
+    print("Vertical accel std:", np.std(az_I))
 
     # Body-frame acceleration at CoG (gravity already removed)
     ax_final = ax_cg

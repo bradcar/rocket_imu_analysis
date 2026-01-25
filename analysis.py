@@ -39,8 +39,8 @@ Body axes rotate with the body; inertial axes are fixed to Earth.
 Outline of Analysis Pipeline
 ----------------------------
 Data Truncation & Filtering:
-    truncate(outvec, timevec, tlaunch, tland)
-        → Crop a vector to a time window. tland really apogee
+    truncate(outvec, timevec, t_launch, t_land)
+        → Crop a vector to a time window. t_land really apogee
     butterworth filter - BETTER THAN IIR
     simple_firstorder_iir_filter(vec, tau)
         → Apply a simple IIR low-pass filter.
@@ -60,7 +60,7 @@ Quaternion / Attitude
         → Transform body-frame accelerations to inertial frame with gravity removed
 
 Integration:
-    integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=None)
+    integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, t_land=None)
         → Double-integrate inertial accel to get vel & position with drift compensation
 
 Correction for Center gravity - rocket CG vs sensor position:
@@ -68,7 +68,7 @@ Correction for Center gravity - rocket CG vs sensor position:
         → Translate body-frame accelerations to center-of-gravity frame.
 
 Sensor Correction:
-    remove_static_bias(ax, ay, az, gr, gp, gy, time_t, tlaunch)
+    remove_static_bias(ax, ay, az, gr, gp, gy, time_t, t_launch)
         → Remove accelerometer and gyro bias using pre-launch window
 
 BNO086 Fused Sensor Simplification:
@@ -127,6 +127,7 @@ SOURCE Credit - thanks to Carlos Montalvo!:
     https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
     https://www.youtube.com/watch?v=mb1RNYKtWQE
 """
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -134,15 +135,13 @@ import numpy as np
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.animate_projectile import animate_projectile
 from mylib.quaternion_functions import quaternion_rotate
-from mylib.read_prepare_6_dof import read_prepare_6_dof
-
-# from mylib.read_prepare_9_dof import read_prepare_9_dof
+from mylib.read_prepare_9_dof import read_prepare_9_dof_shell
 
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)
 
 # --- CONSTANTS & UTILITIES ---
-G_EARTH = 9.81
+G_EARTH = 9.80665  # m/s^2
 
 
 def body_to_inertial_acceleration(time_t, ax_b, ay_b, az_b, q):
@@ -174,7 +173,7 @@ def body_to_inertial_acceleration(time_t, ax_b, ay_b, az_b, q):
     return ax_inertial, ay_inertial, az_inertial
 
 
-def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=None):
+def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, t_land=None):
     """
     Integrate inertial accelerations to get velocity and position with linear drift compensation.
 
@@ -182,7 +181,7 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=
     :param ax_inertial: inertial x-acceleration (m/s^2)
     :param ay_inertial: inertial y-acceleration (m/s^2)
     :param az_inertial: inertial z-acceleration (m/s^2)
-    :param tland: optional: flight end time (seconds) to clip positions after landing
+    :param t_land: optional: flight end time (seconds) to clip positions after landing
     :return:
         vx_c, vy_c, vz_c : drift-compensated velocities
         px_f, py_f, pz_f : positions (meters)
@@ -214,7 +213,7 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=
 
     for i in range(1, num_pts):
         dt = time_t[i] - time_t[i - 1]
-        if tland is None or time_t[i] < tland:
+        if t_land is None or time_t[i] < t_land:
             px_f[i] = px_f[i - 1] + 0.5 * (vx_c[i] + vx_c[i - 1]) * dt
             py_f[i] = py_f[i - 1] + 0.5 * (vy_c[i] + vy_c[i - 1]) * dt
             pz_f[i] = pz_f[i - 1] + 0.5 * (vz_c[i] + vz_c[i - 1]) * dt
@@ -226,17 +225,27 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, tland=
 
 ##############################################################
 # ANALYSIS OF IMU FLIGHT DATA - 9 DoF and 6 DoF processing
-plot_directory = "plots"
 
+
+"""
 # Read and prepare 6 DOF sensor data to create Fused results
+plot_directory = "plots"
+os.makedirs(plot_directory, exist_ok=True)
+
 filename = "raw_input_data/launch_data.txt"
 time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_6_dof(filename, plot_directory)
+"""
 
-# Read and prepare 9 DOF sensor data Fused results
-filename = "raw_input_data/shell_data_xxxxxx_v1.txt"
-# CoG correction assumes spherical shell
-# TODO check Quat & Gyro mapping
-# time_t, ax_final, ay_final, az_final, ax_vert, quat, tlaunch, tland = read_prepare_9_dof_shell(filename, plot_directory)
+# TODO: DEBUG
+#  Read and prepare 9 DOF sensor data Fused results, CoG correction assumes spherical shell
+plot_directory = "plots-9-dof"
+os.makedirs(plot_directory, exist_ok=True)
+
+filename = "imu_data_prep/data_logs/flight_log_2026xxxx_xpm_whole.csv"
+sensor_cm_offset = 0.0  # ~10cm for 4" for 8" shell
+time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_9_dof_shell(filename,
+                                                                                                 plot_directory,
+                                                                                                 sensor_cm_offset)
 
 # --- 1. INERTIAL TRANSFORM with Gravity removed
 ax_I, ay_I, az_I = body_to_inertial_acceleration(time_f, ax_final, ay_final, az_final, quat)
@@ -257,7 +266,7 @@ plt.show()
 # Double Integrate:
 #   1st: create velocities from acceleration
 #   2nd: create positions from velocities
-vx_c, vy_c, vz_c, px_f, py_f, pz_f = integrate_acceleration(time_f, ax_I, ay_I, az_I, tland=t_land)
+vx_c, vy_c, vz_c, px_f, py_f, pz_f = integrate_acceleration(time_f, ax_I, ay_I, az_I, t_land=t_land)
 print("\nCalculated Flight Data:")
 print(f"\tMax altitude: {pz_f.max():.1f} m")
 print(f"\tMax velocity: {vz_c.max():.1f} m/s")
