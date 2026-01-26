@@ -141,7 +141,7 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     ))
 
     # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
-    # TODO CRITICAL check gyro orientation
+    # Match Body Frame [X, Y, Z]
     gr = -data[:, 10]  # Roll mapped to X (negated)
     gy = data[:, 8]  # Yaw mapped to Y
     gp = data[:, 9]  # Pitch mapped to Z
