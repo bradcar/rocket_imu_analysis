@@ -75,7 +75,7 @@ https://github.com/user-attachments/assets/4173820f-55c1-4e17-9c7e-8f5143287e7d
 Rocket IMU data notes:
 - There was significant clipping of accelerometer results during launch andlikely altitude and velocity are wrong.
 - The average 236 msec sampling rate is slow for this analysis to be accurate.
-- There is an "acceleration event" at t=9.6s after launch (883s) and at (888s). We are not sure what these are. Likely one of these is chute deploy.
+- There are several "acceleration events" with the first at t=9.6s after launch (883s). A major event (60 m/s^2) is 888s, which is likely chute pyro deploy event.
 - Sensor data is a bit wonky post-apogee, accurate analysis after time this is confusing.
 
 # New Analysis pipeline for fused-9-DOF BNO086 Post-Flight Analysis
