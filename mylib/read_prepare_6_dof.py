@@ -89,7 +89,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
 
     # --- D.  Hand-adjusted launch/land times
     t_launch = 874.6
-    t_land = 889.5
+    t_land = 895.0
 
     print(f"\tDetected Launch: {t_launch:.2f}s")
     print(f"\tDetected Chute Deploy: {t_land:.2f}s")
