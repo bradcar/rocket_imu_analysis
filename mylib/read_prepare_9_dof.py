@@ -61,7 +61,7 @@ Forward/Up       +Y           +Z              +Y
 Right/Downrange  +X           +X              +X
 Vertical/Cross   +Z           +Y              +Z
 """
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 
 import mylib.psd_functions as psd
