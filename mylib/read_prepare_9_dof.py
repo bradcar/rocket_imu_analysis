@@ -1,11 +1,71 @@
-import matplotlib.pyplot as plt
+# read_prepare_9_dof.py
+"""
+BNO086 Post-Flight Analysis Mapping
+
+1. BNO086 Sensor Frame (Body Frame) [ log_linacc_quat_gyro_flash_spi.py ]
+-------------------------------------------------------------------------
+The physical sensor orientation on the projectile.
+	+X (Roll): Sensor Right (i component)
+	+Y (Pitch): Sensor Forward (j component)
+	+Z (Yaw): Sensor Up (k component)
+	time_stamps in milliseconds (0.1 msec resolution)
+
+Output CSV FILE:
+	a_body: linear_acceleration (HW-fused, gravity removed).
+	quat_final:   quaternion (Body → World)
+	g_final:   quaternion (Body → World)
+	time_stamps in SECONDS (0.0001 sec resolution)
+
+2. Rigidbody / CoG Correction (Body Frame) [read_prepare_9_dof.py]
+------------------------------------------------------------------
+Before moving to world coordinates, we correct for the sensor offset.
+	Input ω: Must be [X,Y,Z] order → [gr, gp, gy]
+	Vector r: [sensor_offset, 0, 0] (Offset along the Right/Roll axis)
+
+CoG Correction:
+	a_cg = a_sensor −(α×r)−(ω×(ω×r))
+
+Output:
+	a_f = a_cg is still in the Body Frame
+
+3. Inertial / World (Analysis Frame) [analysis.py]
+--------------------------------------------------
+Applying q_bw to a_cg to find true motion relative to the ground.
+	+X I (Down-range): North/East or Launch direction.
+	+Y I (Cross-range): Left/Right drift.
+	+Z I (Altitude): Up (Vertical).
+
+Double Integration:
+	v_world = ∫ a_world dt
+	p_world = ∫ v_world dt
+
+4. VPython Display (Visual Frame) [animate_projectile.py]
+---------------------------------
+Mapping the Analysis Frame to VPython’s Screen Coordinates.
+	VPython +X: Right (Screen) ← Analysis X (Down-range)
+	VPython +Y: Up (Screen) ← Analysis Z (Altitude)
+	VPython +Z: Toward User ← Analysis Y (Cross-range)
+
+Code for Position:
+	pos = vector(px_f, pz_f, py_f)
+	a_z = az_I = acceleration up
+
+Code for Orientation:
+	VPython's pointer or axis uses the same remap:
+	obj.axis = rotate(vector(1,0,0), quat)
+		where the vector is remapped to match the visual world.
+
+AXES Summary Table for Code Consistency
+Quantity        Body	Analysis(Inertial)	VPython
+Forward/Up       +Y           +Z              +Y
+Right/Downrange  +X           +X              +X
+Vertical/Cross   +Z           +Y              +Z
+"""
+# import matplotlib.pyplot as plt
 import numpy as np
 
 import mylib.psd_functions as psd
 from mylib.add_2d_plot_note import add_2d_plot_note
-from mylib.quaternion_functions import quaternion_rotate, quaternion_conjugate
-
-G_EARTH = 9.80665  # m/s^2
 
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)
@@ -304,6 +364,5 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     # a_vertical = az_I
 
     print(f"--- NINE DOF Processing END")
-    #return time_f, ax_final, ay_final, az_final, a_vertical, quat_f, t_launch, t_land
+    # return time_f, ax_final, ay_final, az_final, a_vertical, quat_f, t_launch, t_land
     return time_f, ax_final, ay_final, az_final, quat_f, t_launch, t_land
-
