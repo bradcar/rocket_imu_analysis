@@ -1,13 +1,46 @@
-# Linear_acceleration, Quaternion, Gyro logging to flash BNO08x MicroPython SPI
-#
-# CAUTION: TIME IN msec NOT SECONDS, for BNO efficiency
-# CAUTION: CSV IS CONVERTED TO SECONDS in unpack_bin_sensor_logs.py
-#
+# read_prepare_9_dof.py
+
+"""
+Linear_acceleration, Quaternion, Gyro logging from BNO086 sensor to flash memory.
+
+This code checks the calibration accuracy of the bno.linear_acceleration, bno.quaternion, and bno.gyro and
+continues this until all have a better accuracy >=2 (medium to high). Then saves the calibration to the
+BNO086.
+
+After calibration, the bno.linear_acceleration and bno.gyro are measured while not moving to create
+a bias correction. The values collected are shown in an ascii histogram. Then the median is used
+as the bias correction that is applied to dall data.
+
+There are two methods included for storing the data to flash:
+    1. OPTION 1: Buffer all data in memory before writing to Flash - limited to 95 KiB logs
+        write_results_whole_batch(bno, rows, filename)
+    The max size of 95 KiB is a serious limitation due to typical sensor result volumes.
+    This method is included for TESTING-ONLY, as it is low-jitter
+
+    2. OPTION 2: Buffer 4 KiB Sector, then sector to flash. This will show jitter at sector writes.
+        write_results_by_sector(bno, rows, filename)
+    The max size of storage is limited only by the free space on flash. It gathers sensor result <- 4KiB.
+    The 4 KiB limit is due to the Flash's Sector size of 4 KiB. Writing this size is the most efficient.
+    With 5ms sample rate, the flash write and intermittant flush (duty cycle settable in code) will cause
+    50 ms to 110 ms jitter in sample collection.
+
+The BNO086 sensor is connect to Raspberry Pi Pico 2 W by SPI.
+
+Input:
+    *** CAUTION: TIME IN msec NOT SECONDS, for BNO086 efficiency at 5ms 200Hz
+    ax, ay, az, acc, ts_ms = bno.linear_acceleration.full
+    qr, qi, qj, qk = bno.quaternion
+    gy, gp, gr = bno.gyro
+
+Output:
+    *** CAUTION: The created CSV IS CONVERTED TO SECONDS by unpack_bin_sensor_logs.py
+    Seconds, lin_acc_x, lin_acc_y, lin_acc_z, quat_r, quat_i, quat_j, quat_k, gyro_y, gyro_p gyro_r
+
 # Reading Linear_Acc for 1000 rows, doing nothing with output
 # sensor timestamps last_sensor_ms=5724.8 first_sensor_ms=644.9  sensor duration: 5.1 s
 # Sensor msec/Lin_Acc = 5.08 ms
 # Clock msec/Lin_Acc  = 5.06 ms
-# 
+#
 # Writing data in sector chunks to flash in 4 KiB sectors with flush no CRC
 # Array each result for 1000 rows:
 # sensor timestamps last_sensor_ms=11931.5 first_sensor_ms=5724.8  sensor duration: 6.2 s
@@ -23,7 +56,7 @@
 # Clock msec/reports  = 6.29 ms
 # BYTES_PER_ROW=44, data size = 44000 bytes
 # Array = 43.0 KiB, xfer = 6.8 KiB/s
-#
+"""
 
 import binascii  # For fast CRC32
 import gc
@@ -58,7 +91,7 @@ def write_results_whole_batch(bno, rows: int, filename: str):
     """
     Buffer all results in memory then write whole file to flash. The advantage is very little jitter
     for high-frequency updates (5 ms) with little jitter.
-    
+
     Low jitter, but limited to only 95 KiB in-memory storage.
     This function usefor for simple tests, typically use sector-format version.
 
@@ -256,8 +289,8 @@ def write_results_by_sector(bno, rows: int, filename: str):
     print(f"{BYTES_PER_ROW=}, data size = {(rows * BYTES_PER_ROW)} bytes")
     kbytes = (BYTES_PER_ROW * rows) / 1024
     print(f"Array = {kbytes:.1f} KiB, xfer = {kbytes / (pico_ms / 1000.0):.1f} KiB/s")
- 
- 
+
+
 def ascii_histogram(data, bins=15, max_width=40):
     """
     Automatically bins data based on min/max and prints an ASCII histogram.
@@ -268,7 +301,7 @@ def ascii_histogram(data, bins=15, max_width=40):
         return
 
     d_min, d_max = min(data), max(data)
-    
+
     # If all data is identical (e.g., all 0.0), create a small range to avoid division by zero
     if d_min == d_max:
         d_max += 0.1
@@ -276,7 +309,7 @@ def ascii_histogram(data, bins=15, max_width=40):
     # Calculate bin edges and counts
     bin_width = (d_max - d_min) / bins
     counts = [0] * bins
-    
+
     for val in data:
         # Calculate which bin the value belongs to
         idx = int((val - d_min) / bin_width)
@@ -290,14 +323,14 @@ def ascii_histogram(data, bins=15, max_width=40):
 
     print(f"\nHistogram (Range: {d_min:.6f} to {d_max:.6f})")
     print("-" * (max_width + 35))
-    
+
     for i in range(bins):
         b_start = d_min + (i * bin_width)
         b_end = b_start + bin_width
-        
+
         bar_len = int(counts[i] * scale)
         bar = "#" * bar_len
-        
+
         # Print row: Range | Count | Bar
         print(f"{b_start:10.6f} to {b_end:10.6f} | {counts[i]:5d} | {bar}")
 
@@ -314,7 +347,7 @@ def get_median(data):
 def get_static_bias(bno, samples=100):
     """
     Calculate residual bias whilee sensor stable. Do this for number of 'samples'
-    
+
     EXAMPLE OUTPUT
     --------------
     ascii Histograms of Acceleration Biases (m/s²):
@@ -323,20 +356,20 @@ def get_static_bias(bno, samples=100):
 
     Histogram (Range: -0.085938 to 0.722656)
     ---------------------------------------------------------------------------
-     -0.085938 to  -0.032031 |     1 | 
+     -0.085938 to  -0.032031 |     1 |
      -0.032031 to   0.021875 |    94 | ########################################
-      0.021875 to   0.075781 |     1 | 
-      0.075781 to   0.129688 |     0 | 
-      0.129688 to   0.183594 |     0 | 
-      0.183594 to   0.237500 |     0 | 
-      0.237500 to   0.291406 |     0 | 
-      0.291406 to   0.345312 |     0 | 
-      0.345312 to   0.399219 |     0 | 
-      0.399219 to   0.453125 |     0 | 
-      0.453125 to   0.507031 |     0 | 
-      0.507031 to   0.560938 |     0 | 
-      0.560938 to   0.614844 |     0 | 
-      0.614844 to   0.668750 |     0 | 
+      0.021875 to   0.075781 |     1 |
+      0.075781 to   0.129688 |     0 |
+      0.129688 to   0.183594 |     0 |
+      0.183594 to   0.237500 |     0 |
+      0.237500 to   0.291406 |     0 |
+      0.291406 to   0.345312 |     0 |
+      0.345312 to   0.399219 |     0 |
+      0.399219 to   0.453125 |     0 |
+      0.453125 to   0.507031 |     0 |
+      0.507031 to   0.560938 |     0 |
+      0.560938 to   0.614844 |     0 |
+      0.614844 to   0.668750 |     0 |
       0.668750 to   0.722656 |     4 | #
 
     bias will use median(ay) = 0.0000000
@@ -344,19 +377,19 @@ def get_static_bias(bno, samples=100):
     Histogram (Range: -9.101562 to 0.164062)
     ---------------------------------------------------------------------------
      -9.101562 to  -8.483854 |     4 | #
-     -8.483854 to  -7.866146 |     0 | 
-     -7.866146 to  -7.248438 |     0 | 
-     -7.248438 to  -6.630729 |     0 | 
-     -6.630729 to  -6.013021 |     0 | 
-     -6.013021 to  -5.395313 |     0 | 
-     -5.395312 to  -4.777604 |     0 | 
-     -4.777604 to  -4.159896 |     0 | 
-     -4.159896 to  -3.542188 |     0 | 
-     -3.542188 to  -2.924480 |     0 | 
-     -2.924480 to  -2.306771 |     0 | 
-     -2.306771 to  -1.689062 |     0 | 
-     -1.689063 to  -1.071354 |     0 | 
-     -1.071354 to  -0.453646 |     0 | 
+     -8.483854 to  -7.866146 |     0 |
+     -7.866146 to  -7.248438 |     0 |
+     -7.248438 to  -6.630729 |     0 |
+     -6.630729 to  -6.013021 |     0 |
+     -6.013021 to  -5.395313 |     0 |
+     -5.395312 to  -4.777604 |     0 |
+     -4.777604 to  -4.159896 |     0 |
+     -4.159896 to  -3.542188 |     0 |
+     -3.542188 to  -2.924480 |     0 |
+     -2.924480 to  -2.306771 |     0 |
+     -2.306771 to  -1.689062 |     0 |
+     -1.689063 to  -1.071354 |     0 |
+     -1.071354 to  -0.453646 |     0 |
      -0.453646 to   0.164063 |    96 | ########################################
 
     bias will use median(az) = 0.0000000
@@ -364,19 +397,19 @@ def get_static_bias(bno, samples=100):
     Histogram (Range: -0.093750 to 7.046875)
     ---------------------------------------------------------------------------
      -0.093750 to   0.382292 |    96 | ########################################
-      0.382292 to   0.858333 |     0 | 
-      0.858333 to   1.334375 |     0 | 
-      1.334375 to   1.810417 |     0 | 
-      1.810417 to   2.286458 |     0 | 
-      2.286458 to   2.762500 |     0 | 
-      2.762500 to   3.238542 |     0 | 
-      3.238542 to   3.714583 |     0 | 
-      3.714583 to   4.190625 |     0 | 
-      4.190625 to   4.666667 |     0 | 
-      4.666667 to   5.142709 |     0 | 
-      5.142708 to   5.618750 |     0 | 
-      5.618750 to   6.094792 |     0 | 
-      6.094792 to   6.570834 |     0 | 
+      0.382292 to   0.858333 |     0 |
+      0.858333 to   1.334375 |     0 |
+      1.334375 to   1.810417 |     0 |
+      1.810417 to   2.286458 |     0 |
+      2.286458 to   2.762500 |     0 |
+      2.762500 to   3.238542 |     0 |
+      3.238542 to   3.714583 |     0 |
+      3.714583 to   4.190625 |     0 |
+      4.190625 to   4.666667 |     0 |
+      4.666667 to   5.142709 |     0 |
+      5.142708 to   5.618750 |     0 |
+      5.618750 to   6.094792 |     0 |
+      6.094792 to   6.570834 |     0 |
       6.570833 to   7.046875 |     4 | #
 
     ascii Histograms of Gyroscope Biases (rad/s):
@@ -385,40 +418,40 @@ def get_static_bias(bno, samples=100):
 
     Histogram (Range: -0.810547 to 0.013672)
     ---------------------------------------------------------------------------
-     -0.810547 to  -0.755599 |     2 | 
-     -0.755599 to  -0.700651 |     0 | 
-     -0.700651 to  -0.645703 |     0 | 
-     -0.645703 to  -0.590755 |     0 | 
-     -0.590755 to  -0.535807 |     0 | 
-     -0.535807 to  -0.480859 |     0 | 
-     -0.480859 to  -0.425911 |     0 | 
-     -0.425911 to  -0.370964 |     0 | 
-     -0.370964 to  -0.316016 |     0 | 
-     -0.316016 to  -0.261068 |     0 | 
-     -0.261068 to  -0.206120 |     0 | 
-     -0.206120 to  -0.151172 |     0 | 
-     -0.151172 to  -0.096224 |     0 | 
-     -0.096224 to  -0.041276 |     0 | 
+     -0.810547 to  -0.755599 |     2 |
+     -0.755599 to  -0.700651 |     0 |
+     -0.700651 to  -0.645703 |     0 |
+     -0.645703 to  -0.590755 |     0 |
+     -0.590755 to  -0.535807 |     0 |
+     -0.535807 to  -0.480859 |     0 |
+     -0.480859 to  -0.425911 |     0 |
+     -0.425911 to  -0.370964 |     0 |
+     -0.370964 to  -0.316016 |     0 |
+     -0.316016 to  -0.261068 |     0 |
+     -0.261068 to  -0.206120 |     0 |
+     -0.206120 to  -0.151172 |     0 |
+     -0.151172 to  -0.096224 |     0 |
+     -0.096224 to  -0.041276 |     0 |
      -0.041276 to   0.013672 |    98 | ########################################
 
     bias will use median(gp) = 0.0000000
 
     Histogram (Range: -0.363281 to 0.005859)
     ---------------------------------------------------------------------------
-     -0.363281 to  -0.338672 |     2 | 
-     -0.338672 to  -0.314062 |     0 | 
-     -0.314062 to  -0.289453 |     0 | 
-     -0.289453 to  -0.264844 |     0 | 
-     -0.264844 to  -0.240234 |     0 | 
-     -0.240234 to  -0.215625 |     0 | 
-     -0.215625 to  -0.191016 |     0 | 
-     -0.191016 to  -0.166406 |     0 | 
-     -0.166406 to  -0.141797 |     0 | 
-     -0.141797 to  -0.117188 |     0 | 
-     -0.117188 to  -0.092578 |     0 | 
-     -0.092578 to  -0.067969 |     0 | 
-     -0.067969 to  -0.043359 |     0 | 
-     -0.043359 to  -0.018750 |     0 | 
+     -0.363281 to  -0.338672 |     2 |
+     -0.338672 to  -0.314062 |     0 |
+     -0.314062 to  -0.289453 |     0 |
+     -0.289453 to  -0.264844 |     0 |
+     -0.264844 to  -0.240234 |     0 |
+     -0.240234 to  -0.215625 |     0 |
+     -0.215625 to  -0.191016 |     0 |
+     -0.191016 to  -0.166406 |     0 |
+     -0.166406 to  -0.141797 |     0 |
+     -0.141797 to  -0.117188 |     0 |
+     -0.117188 to  -0.092578 |     0 |
+     -0.092578 to  -0.067969 |     0 |
+     -0.067969 to  -0.043359 |     0 |
+     -0.043359 to  -0.018750 |     0 |
      -0.018750 to   0.005859 |    98 | ########################################
 
     bias will use median(gr) = 0.0000000
@@ -426,20 +459,20 @@ def get_static_bias(bno, samples=100):
     Histogram (Range: -0.003906 to 0.162109)
     ---------------------------------------------------------------------------
      -0.003906 to   0.007161 |    98 | ########################################
-      0.007161 to   0.018229 |     0 | 
-      0.018229 to   0.029297 |     0 | 
-      0.029297 to   0.040365 |     0 | 
-      0.040365 to   0.051432 |     0 | 
-      0.051432 to   0.062500 |     0 | 
-      0.062500 to   0.073568 |     0 | 
-      0.073568 to   0.084635 |     0 | 
-      0.084635 to   0.095703 |     0 | 
-      0.095703 to   0.106771 |     0 | 
-      0.106771 to   0.117839 |     0 | 
-      0.117839 to   0.128906 |     0 | 
-      0.128906 to   0.139974 |     0 | 
-      0.139974 to   0.151042 |     0 | 
-      0.151042 to   0.162109 |     2 | 
+      0.007161 to   0.018229 |     0 |
+      0.018229 to   0.029297 |     0 |
+      0.029297 to   0.040365 |     0 |
+      0.040365 to   0.051432 |     0 |
+      0.051432 to   0.062500 |     0 |
+      0.062500 to   0.073568 |     0 |
+      0.073568 to   0.084635 |     0 |
+      0.084635 to   0.095703 |     0 |
+      0.095703 to   0.106771 |     0 |
+      0.106771 to   0.117839 |     0 |
+      0.117839 to   0.128906 |     0 |
+      0.128906 to   0.139974 |     0 |
+      0.139974 to   0.151042 |     0 |
+      0.151042 to   0.162109 |     2 |
 
     Static Acceleration Biases: AX_BIAS=-0.003906, AY_BIAS=+0.000000, AZ_BIAS=+0.000000
     Static Gyro Biases:         GY_BIAS=+0.000000, GP_BIAS=+0.000000, GR_BIAS=+0.000000
@@ -451,7 +484,7 @@ def get_static_bias(bno, samples=100):
     print("\n* DO NOT MOVE SENSOR...")
     sum_ax, sum_ay, sum_az = 0.0, 0.0, 0.0
     sum_gy, sum_gp, sum_gr = 0.0, 0.0, 0.0
-    
+
     ax = array('f', [0.0] * samples)
     ay = array('f', [0.0] * samples)
     az = array('f', [0.0] * samples)
@@ -466,13 +499,13 @@ def get_static_bias(bno, samples=100):
 
             new_ax, new_ay, new_az = bno.linear_acceleration
             new_gy, new_gp, new_gr = bno.gyro
-            
+
             # Store in float arrays
             ax[idx], ay[idx], az[idx] = new_ax, new_ay, new_az
             gy[idx], gp[idx], gr[idx] = new_gy, new_gp, new_gr
-            
+
             idx += 1
-    
+
     # There can be significant outliers, using median instead of average
     AX_BIAS = get_median(ax)
     AY_BIAS = get_median(ay)
@@ -480,7 +513,7 @@ def get_static_bias(bno, samples=100):
     GY_BIAS = get_median(gy)
     GP_BIAS = get_median(gp)
     GR_BIAS = get_median(gr)
-        
+
     print("\nascii Histograms of Acceleration Biases (m/s²):")
     print(f"\nbias will use median(ax) = {AX_BIAS:.7f}")
     ascii_histogram(ax, bins=15)
@@ -496,7 +529,7 @@ def get_static_bias(bno, samples=100):
     ascii_histogram(gp, bins=15)
     print(f"\nbias will use median(gr) = {GP_BIAS:.7f}")
     ascii_histogram(gr, bins=15)
-    
+
 
 def sensor_calibration(bno, stable_sec):
     """ Sensor calibration, must be stable for stable_sec. TODO no max for timeout
@@ -593,7 +626,7 @@ def main():
     print(f"\nStatic Acceleration Biases: {AX_BIAS=:+.6f}, {AY_BIAS=:+.6f}, {AZ_BIAS=:+.6f}")
     print(f"Static Gyro Biases:         {GY_BIAS=:+.6f}, {GP_BIAS=:+.6f}, {GR_BIAS=:+.6f}")
 
-    # Log results 
+    # Log results
 
     # 5ms sample period generate 200 rows/sec
     duration_seconds = 20

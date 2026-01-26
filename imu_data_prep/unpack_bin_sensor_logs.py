@@ -1,18 +1,33 @@
 # unpack_bin_sensor_logs.py
 """
 # Unpacks Bin Sensor Logs created by log_linacc_quat_gyro_flash_spi.py
-# CAUTION: CSV IS CONVERTED TO SECONDS from msec
-#
-# Unpacks both styles of writes:
-# 1. simple whole file where rows are contiguous
-# 2. 4 KiB sector-sized chunks with 96 rows of data and 4 bytes CRC
-#
-# Sample timings:
+
+Input data:
+    *** CAUTION: TIME IN msec NOT SECONDS, for BNO086 efficiency at 5ms 200Hz
+    it reads the binary data in "flight_log_2026xxxx_xpm_sector.bin" which has the
+    fp32 data following order:
+        ts_ms, ax, ay, az, qr, qi, qj, qk, gy, gp, gr
+
+    Wnich was collected with:
+        ax, ay, az, acc, ts_ms = bno.linear_acceleration.full
+        qr, qi, qj, qk = bno.quaternion
+        gy, gp, gr = bno.gyro
+
+Output:
+    *** CAUTION: The created CSV IS CONVERTED TO SECONDS by unpack_bin_sensor_logs.py
+    SECONDS, ax, ay, az, qr, qi, qj, qk, gy, gp, gr
+
+
+The format of the file for  both ways of reading/storing results are identical:
+    1. simple whole file where rows are contiguous
+    2. 4 KiB sector-sized chunks with 96 rows of data and 4 bytes CRC
+       This code checks the CRC and will error and skip bad sectors.
+
+Sample timings:
 # Reading Linear_Acc for 1000 rows, doing nothing with output
 # sensor timestamps last_sensor_ms=5724.8 first_sensor_ms=644.9  sensor duration: 5.1 s
 # Sensor msec/Lin_Acc = 5.08 ms
 # Clock msec/Lin_Acc  = 5.06 ms
-#
 
 Sector-formatted data has delays caused by sector writes & flushes
 
