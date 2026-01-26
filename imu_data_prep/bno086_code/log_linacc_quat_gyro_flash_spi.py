@@ -570,8 +570,9 @@ def main():
     print("Start")
     print("====================================\n")
 
-    # Update frequency in Hz, 200Hz = 5ms sample, 10Hz = 100ms
-    update_frequency = 10
+    # Update frequency in Hz, 200Hz = 5ms sample
+    # very slow for oriention testing: 10Hz = 100ms
+    update_frequency = 200
     bno.linear_acceleration.enable(update_frequency)
     bno.gyro.enable(update_frequency)
     bno.quaternion.enable(update_frequency)
