@@ -1,10 +1,16 @@
 # animate_projectile.py
 """
-Animate projectile with vpython
+Animate projectile with VPython.
+
+VPython only stores created frames in ~/Downloads
+
+TODO: Currently this animates using quat, position, vz, ax_f
+ consider passing in actual gyro data instead of estimated gyro from quaternion data.
 """
 
 import math
-import os
+import sys as sys
+import time as time
 
 from vpython import sphere, box, arrow, color, rate, scene, label, vector
 
@@ -12,7 +18,9 @@ from mylib.quaternion_functions import *
 
 # --- CONSTANTS & UTILITIES ---
 G_EARTH = 9.81
-frames_directory = "video"
+
+# VPython only stores frames in ~/Downloads
+# frames_directory = "frames"
 
 
 def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
@@ -29,11 +37,12 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     :return:
     """
 
-    # set up ability to capture png outputs
-    os.makedirs("video", exist_ok=True)
-    scene.capture("frame.png")
+    # Will not work, Vpython only stores frames in ~/Downloads
+    # Create the directory if it doesn't exist
+    # os.makedirs(frames_directory, exist_ok=True)
 
     # Set scene
+    scene.capture("frame.png")
     scene.title = "Rocket Launch Simulation - Note: slow flip starts at end of thrust burn, unstable rocket"
 
     # light blue sky
@@ -50,9 +59,8 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     scene.userspin = True  # Allows you to rotate, but won't move automatically
 
     # Camera settings
-
     camera_yaw = math.radians(10)  # 10 degrees off x-axis
-    camera_distance = 380
+    camera_distance = 460
     camera_height = 60
 
     scene.camera.pos = vector(
@@ -64,7 +72,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
     scene.camera.axis = vector(
         camera_distance * math.sin(camera_yaw),
         camera_distance * math.cos(camera_yaw),
-        110
+        165
     )
 
     scene.up = vector(0, 0, 1)
@@ -102,8 +110,9 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
                         opacity=1.0, height=24)
 
     # --- Animation loop ---
-    for i in range(len(px_f)):
-        rate(2)  # 30 frames per second
+    total_frames = len(px_f)
+    for i in range( total_frames):
+        rate(2)  # slow down flight to see changes
 
         # Update rocket position
         rocket.pos = vector(px_f[i], py_f[i], pz_f[i])
@@ -160,7 +169,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
 
         # Trail effect: red/thick during thrust, yellow/thin during coast
         # But there are high acceration events, likely chute pyro near apogee
-        if ax_f[i] > 0.5:
+        if ax_f[i] > 10.0:
             # if flight_time < 4 and ax_f[i] > 0.5:
             rocket.trail_color = color.red
             rocket.trail_radius = 1.5
@@ -168,9 +177,26 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
             rocket.trail_color = color.yellow
             rocket.trail_radius = 0.5
 
-        # Save frame for video
-        scene.capture(f"frame_{i:04d}")
+        # Save frame for video, Wait for frame write to finish, also give 0.1s extra, saves in .png
+        frame_name = f"frame_{i:04d}"
+        scene.capture(frame_name)
+        scene.waitfor("draw_complete")
+        time.sleep(0.1)
+
+        # print progress bar, where # is filled, . is empty
+        percent = (i + 1) / total_frames
+        bar_length = 20
+        filled_length = int(bar_length * percent)
+        bar = '#' * filled_length + '.' * (bar_length - filled_length)
+
+        # The \r at the start returns the cursor to the beginning of the line
+        status = f"\rAnimation frame creation progress: |{bar}| {int(percent * 100)}%"
+        sys.stdout.write(status)
+        sys.stdout.flush()
 
         # Debug to adjust viewer angle
         # print(f"{scene.camera.pos=}")
         # print(f"{scene.camera.axis=}")
+
+    # final print
+    print("\nAnimation frames Done")
