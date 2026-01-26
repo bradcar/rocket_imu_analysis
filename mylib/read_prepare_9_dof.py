@@ -2,6 +2,11 @@
 """
 BNO086 Post-Flight Analysis Mapping
 
+TODO: IF NEED TO SMOOTH GYRO IF seeing >100 rad/s
+ smooth_gyro_alpha which uses savgol_filter to smooths gyro data & alpha
+TODO: Recommendation: If you see "fuzzy" results in if 3D path, then apply a mild low-pass filter to the
+ gr_f, gy_f, gp_f signals before calculating the gradient, or use a smoothed spline to find the derivative.
+
 1. BNO086 Sensor Frame (Body Frame) [ log_linacc_quat_gyro_flash_spi.py ]
 -------------------------------------------------------------------------
 The physical sensor orientation on the projectile.
@@ -63,12 +68,39 @@ Vertical/Cross   +Z           +Y              +Z
 """
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import savgol_filter
 
 import mylib.psd_functions as psd
 from mylib.add_2d_plot_note import add_2d_plot_note
 
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)
+
+
+def smooth_gyro_alpha(time_f, gyro_data, window_len=11, polyorder=2):
+    """
+    TODO: DEBUG BEFORE USE
+    uses savgol_filter to smooths gyro data and calculates angular acceleration (alpha).
+    :param window_len: Must be odd. Larger = smoother but more lag.
+    :param polyorder: Polynomial order. 2 is usually ideal for rotation.
+    """
+    # Smooth the raw gyro signals first to remove high-freq jitter
+    gr_s = savgol_filter(gyro_data[:, 0], window_len, polyorder)
+    gy_s = savgol_filter(gyro_data[:, 1], window_len, polyorder)
+    gp_s = savgol_filter(gyro_data[:, 2], window_len, polyorder)
+
+    # Calculate gradient from the smoothed signal
+    alpha = np.column_stack((
+        np.gradient(gr_s, time_f),
+        np.gradient(gy_s, time_f),
+        np.gradient(gp_s, time_f)
+    ))
+
+    # Optional: Smooth alpha itself if the gradient is still noisy
+    for i in range(3):
+        alpha[:, i] = savgol_filter(alpha[:, i], window_len, polyorder)
+
+    return alpha, gr_s, gy_s, gp_s
 
 
 def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp_f):
@@ -84,6 +116,16 @@ def cog_correction_shell(sensor_offset, time_f, ax_b, ay_b, az_b, gr_f, gy_f, gp
 
     # Angular velocity (rad/s) in BODY frame: gr=ωx, gp=ωy, gy=ωz
     omega = np.column_stack((gr_f, gy_f, gp_f))
+
+    # # TODO: IF NEED TO SMOOTH GYRO IF seeing >100 rad/s
+    # # Group gyro data for the helper function
+    # gyro_input = np.column_stack((gr_f, gy_f, gp_f))
+    #
+    # # Use a window size of ~50ms (at 200Hz, window_len=11)
+    # alpha, gr_smooth, gy_smooth, gp_smooth = smooth_gyro_alpha(time_f, gyro_input, window_len=11)
+    #
+    # # Now use the smoothed versions for your cross products
+    # omega = np.column_stack((gr_smooth, gy_smooth, gp_smooth))
 
     # Angular acceleration (rad/s^2)
     alpha = np.column_stack((
@@ -130,13 +172,12 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     # Linear Accel (Gravity already removed by BNO086 hardware)
     ax_lin, ay_lin, az_lin = data[:, 1], data[:, 2], data[:, 3]
 
-    # TODO test re-map of Quaternion
     # BNO Quaternions: Hamiltonian (r, i, j, k)
     q_raw = np.column_stack((
         data[:, 4],  # qr Scalar is same
         data[:, 5],  # qi is Mapped to X (roll)
         data[:, 6],  # qj is Mapped to Z (yaw)
-        data[:, 7]   # qk is Mapped to Y (pitch)
+        data[:, 7]  # qk is Mapped to Y (pitch)
     ))
 
     # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
@@ -359,7 +400,6 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     # az_final = az_cg
     #
     # # Vertical acceleration (sensor Z mapped to inertial Z)
-    # # TODO CHECK Inertial Z is vertical and Quaternion is Earth-aligned
     # a_vertical = az_I
 
     print(f"--- NINE DOF Processing END")
