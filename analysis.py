@@ -135,7 +135,8 @@ import numpy as np
 from mylib.add_2d_plot_note import add_2d_plot_note
 from mylib.animate_projectile import animate_projectile
 from mylib.quaternion_functions import quaternion_rotate
-from mylib.read_prepare_9_dof import read_prepare_9_dof_shell
+from mylib.read_prepare_6_dof import read_prepare_6_dof
+# from mylib.read_prepare_9_dof import read_prepare_9_dof_shell
 
 # use fp64 prints thoughout
 np.set_printoptions(precision=10)

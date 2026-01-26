@@ -41,14 +41,14 @@ Flight Data:
 	Min/Max interval: 217.0 ms / 404.0 ms
 	Standard Dev: 28.0 ms, jitter: 12%
 	Detected Launch: 874.60s
-	Detected Chute Deploy: 889.50s
-	Flight Duration: 14.90s
-	Est max acceleration error due to 4" offset: 7.09 m/s², 72%
+	Detected Chute Deploy: 895.00s
+	Flight Duration: 20.40s
+	Est max acceleration error due to 4" offset: 5.45 m/s², 56%
 --- Six DOF Processing END
 
 Calculated Flight Data:
-	Max altitude: 448.1 m
-	Max velocity: 59.3 m/s
+	Max altitude: 650.6 m
+	Max velocity: 63.3 m/s
 	Max acceleration: 39.2 m/s^2, 4.0 g
 ```
 ## Images from Video
@@ -61,9 +61,9 @@ t = 6.3 sec, in coast phase the rocket starts to tumble at apogee it is nose dow
 
 <img src="imgs/frame_0027.png" width="800"/>
 
-t = 16.6 sec, at apogee the tumble increases. In addition, at the chute deploy explosion, the sensor seems to head higher.
+t = 19.5 sec, maxium height of 650.6m is reach, tumbling is excessive. Upward velocity goes to zero.
 
-<img src="imgs/frame_0071.png" width="800"/>
+<img src="imgs/frame_0083.png" width="800"/>
 
 ## Video Output
 
