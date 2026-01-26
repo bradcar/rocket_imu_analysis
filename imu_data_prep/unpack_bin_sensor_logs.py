@@ -134,7 +134,7 @@ def decode_sector_buffer(filename):
 
 def ascii_histogram(data):
     """
-    prints horizontal ascii histogram showing counts and scaled where longest bar is set by max_width.
+    Prints horizontal ascii histogram showing times andcounts. Horizontal scale of longest bar is max_width.
     :param data:
     :return:
     """
