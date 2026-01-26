@@ -132,12 +132,11 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
 
     # TODO test re-map of Quaternion
     # BNO Quaternions: Hamiltonian (r, i, j, k)
-    # Re-Mapping: X_new = -X_old, Y_new = Z_old, Z_new = Y_old
     q_raw = np.column_stack((
         data[:, 4],  # qr Scalar is same
-        data[:, 5],  # qi is Mapped to -X (roll)
+        data[:, 5],  # qi is Mapped to X (roll)
         data[:, 6],  # qj is Mapped to Z (yaw)
-        data[:, 7]  # qk is Mapped to Y (pitch)
+        data[:, 7]   # qk is Mapped to Y (pitch)
     ))
 
     # Gyros (used in CoG correction), we use Yaw-Pitch-Roll in sensor
