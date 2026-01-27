@@ -178,7 +178,7 @@ def animate_projectile(time_t, px_f, py_f, pz_f, vz, q, ax_f):
             rocket.trail_radius = 0.5
 
         # Save frame for video, Wait for frame write to finish, also give 0.1s extra, saves in .png
-        frame_name = f"frame_{i:04d}"
+        frame_name = f"projectile_frame_{i:04d}"
         scene.capture(frame_name)
         scene.waitfor("draw_complete")
         time.sleep(0.1)

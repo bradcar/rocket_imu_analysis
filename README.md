@@ -56,15 +56,15 @@ Calculated Flight Data:
 
 t = 3.0 sec after launch right before thrust phase ends.
 
-<img src="imgs/frame_0013.png" width="800"/>
+<img src="imgs/projectile_frame_0013.png" width="800"/>
 
 t = 6.3 sec, in coast phase the rocket starts to tumble at apogee it is nose down.
 
-<img src="imgs/frame_0027.png" width="800"/>
+<img src="imgs/projectile_frame_0027.png" width="800"/>
 
 t = 19.5 sec, maxium height of 650.6m is reach, tumbling is excessive. Upward velocity goes to zero.
 
-<img src="imgs/frame_0083.png" width="800"/>
+<img src="imgs/projectile_frame_0083.png" width="800"/>
 
 ## Video Output
 

@@ -72,7 +72,7 @@ Sensor Correction:
         → Remove accelerometer and gyro bias using pre-launch window
 
 BNO086 Fused Sensor Simplification:
-=============================
+===================================
     The BNO086 already provides fused quaternions (body → inertial) and
     linear acceleration (gravity subtracted). Our bno08x library will also capture data at 5ms periods (200 Hz)
     and report the actual sample intervals to 0.1ms accuracy which should improve the double integration errors.
@@ -250,7 +250,6 @@ time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_pre
 #                                                                                         plot_directory,
 #                                                                                         sensor_cm_offset)
 
-
 # --- 1. INERTIAL TRANSFORM with Gravity removed
 ax_I, ay_I, az_I = body_to_inertial_acceleration(time_f, ax_final, ay_final, az_final, quat)
 
@@ -301,8 +300,7 @@ add_2d_plot_note("seems reasonable drift scale", x=0.4)
 plt.savefig(f"{plot_directory}/drift-plot.pdf")
 plt.show()
 
-# 3D Plot flight path
-# set x-axis and y-axis to same range
+# 3D Plot flight path - set x-axis and y-axis to same range
 x_min, x_max = px_f.min(), px_f.max()
 y_min, y_max = py_f.min(), py_f.max()
 x_center = 0.5 * (x_max + x_min)
