@@ -35,21 +35,18 @@ ffmpeg -framerate 2 \
        "$VIDEO_DIR/$VIDEO_NAME"
 
 # Open video (QuickTime on macOS)
-open "$VIDEO_DIR/$VIDEO_NAME"
-
-# Optional remove frames after video creation
 if [ -f "$VIDEO_DIR/$VIDEO_NAME" ]; then
-    echo "Success: Opening video..."
+
     open "$VIDEO_DIR/$VIDEO_NAME"
+    echo "Success: Opening video..."
 
     # Optional: only remove if you are sure you don't need to re-run ffmpeg
-        echo "ffmpeg failed to create video."
     rm "$VIDEO_DIR"/${FRAME_PREFIX}_*.png
     echo "removing frames from ./$VIDEO_DIR that were used to create video"
     # Clear old frames in target first
     rm -f "$VIDEO_DIR"/${FRAME_PREFIX}_*.png
 else
-    echo "ffmpeg failed to create video."
+    echo "ffmpeg: failed to create video."
 fi
 
 # by hand
