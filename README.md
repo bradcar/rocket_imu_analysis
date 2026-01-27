@@ -19,6 +19,7 @@ Run script to create video in ./video from ~/Downloads/frame_0000.png to ~/Downl
 THANKS to Carlos Montalvo! You have an awesome video and GitHub repo!
 
 https://github.com/cmontalvo251/aerospace/blob/main/rockets/PLAR/post_launch_analysis.py
+
 https://www.youtube.com/watch?v=mb1RNYKtWQE
 
 ## Original Rocket Flight Analysis:
@@ -69,17 +70,14 @@ t = 19.5 sec, maxium height of 650.6m is reach, tumbling is excessive. Upward ve
 
 Video created using VPython to animate the flight data:
 
-https://github.com/user-attachments/assets/0738fe81-0436-4e07-a915-c6b6682752a6
+https://github.com/user-attachments/assets/4173820f-55c1-4e17-9c7e-8f5143287e7d
+
 
 Rocket IMU data notes:
 - There was significant clipping of accelerometer results during launch andlikely altitude and velocity are wrong.
-- The average 264 msec sampling rate is slow for this application,
-- There is an "acceleration event" at t=9.6s after launch (883s) and at (888s). We are not sure what these are. Likely one of these is chute deploy.
+- The average 236 msec sampling rate is slow for this analysis to be accurate.
+- There are several "acceleration events" with the first at t=9.6s after launch (883s). A major event (60 m/s^2) is 888s, which is likely chute pyro deploy event.
 - Sensor data is a bit wonky post-apogee, accurate analysis after time this is confusing.
-- 
-
-
-
 
 # New Analysis pipeline for fused-9-DOF BNO086 Post-Flight Analysis
 
@@ -141,7 +139,7 @@ Code for Orientation:
 		where the vector is remapped to match the visual world.
 ```
 
-## AXES Summary Table for Code Consistency
+## Axes Summary Table for Code Consistency
 ```
 Quantity        Body	Analysis(Inertial)  VPython
 Forward/Up       +Y           +Z              +Y
