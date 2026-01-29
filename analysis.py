@@ -4,10 +4,10 @@ Rocket trajectory post-flight analysis.
 
 Data flow: raw → truncated → filtered → bias-corrected → inertial.
 
-Cast input raw_input_data to FP64, Numpy defaults to 64-bit.
+Cast input flight_sensor_input_data to FP64, Numpy defaults to 64-bit.
 
 NAMING CONVENTION:
-Preliminary raw_input_data procesing
+Preliminary flight_sensor_input_data procesing
     ax_t, ay_t, az_t   : truncated accel (flight window)
     gr_t, gp_t, gy_t   : truncated gyro (flight window)
     ax_f, ay_f, az_f   : accel filtered values (flight window)
@@ -231,7 +231,7 @@ def integrate_acceleration(time_t, ax_inertial, ay_inertial, az_inertial, t_land
 plot_directory = "plots"
 os.makedirs(plot_directory, exist_ok=True)
 
-filename = "raw_input_data/launch_data.txt"
+filename = "flight_sensor_input_data/launch_data_file-6dof_nov2022_carlos.txt"
 time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_prepare_6_dof(filename, plot_directory)
 
 
@@ -244,7 +244,7 @@ time_f, ax_final, ay_final, az_final, ax_vert, quat, t_launch, t_land = read_pre
 # plot_directory = "plots-9-dof"
 # os.makedirs(plot_directory, exist_ok=True)
 #
-# filename = "imu_data_prep/data_logs/flight_log_2026xxxx_xpm_whole.csv"
+# filename = "imu_data_prep/imu_test_data_logs/flight_log_2026xxxx_xpm_whole.csv"
 # sensor_cm_offset = 0.0  # ~10cm for 4" for 8" shell
 # time_f, ax_final, ay_final, az_final, quat, t_launch, t_land = read_prepare_9_dof_shell(filename,
 #                                                                                         plot_directory,

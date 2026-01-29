@@ -12,7 +12,7 @@ def get_psd(signal_vector, fs, nperseg=1024):
 
     Usage:
         ax_freq, ax_psd = get_psd(ax_b, fs=sample_frequency, nperseg=1024)
-        plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+        plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
         print(f"{len(ax_b)=}, {len(ax_psd)=}")
 
     :param signal_vector: input

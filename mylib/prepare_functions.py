@@ -30,7 +30,7 @@ def estimate_attitude_mahony_trapezoidal(time_t, ax, ay, az, gr, gp, gy, twokp=1
     This keeps the orientation (quat) much more stable during the high-angular-rate portions of the flight.
 
     Trapezoidal is better tha Runge-Kutta in this case, because:
-    - Stable with noisy raw_input_data
+    - Stable with noisy flight_sensor_input_data
     - Best with irregular timestamps
     - Cancels some high-frequency noise
     - Aligns with post-flight analysis best practices (NASA, ESA)

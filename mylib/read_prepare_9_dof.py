@@ -73,7 +73,7 @@ from scipy.signal import savgol_filter
 import mylib.psd_functions as psd
 from mylib.add_2d_plot_note import add_2d_plot_note
 
-# use fp64 prints thoughout
+# use fp64 prints throughput
 np.set_printoptions(precision=10)
 
 
@@ -279,39 +279,39 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
 
     # --- E. Analyze PSD Power Spectral Density - Is filtering needed?
     ax_freq, ax_psd = psd.get_psd(ax_b, fs=sample_frequency, nperseg=1024)
-    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
 
     plt.figure(figsize=(8, 4))
     plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of ax_b (whole input raw_input_data)")
+    plt.title("PSD of ax_b (whole input flight_sensor_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot.pdf")
     plt.show()
 
     ay_freq, ay_psd = psd.get_psd(ay_b, fs=sample_frequency, nperseg=1024)
-    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
 
     plt.figure(figsize=(8, 4))
     plt.loglog(ay_freq[1:], ay_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of ay_b (whole input raw_input_data)")
+    plt.title("PSD of ay_b (whole input flight_sensor_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot-ax.pdf")
     plt.show()
 
     az_freq, az_psd = psd.get_psd(az_b, fs=sample_frequency, nperseg=1024)
-    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
 
     plt.figure(figsize=(8, 4))
     plt.loglog(az_freq[1:], az_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of az_b (whole input raw_input_data)")
+    plt.title("PSD of az_b (whole input flight_sensor_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot-ay.pdf")
@@ -323,7 +323,7 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     plt.ylabel("PSD (m²/s⁴/Hz)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.title("Zoomed PSD of ax_b (whole input raw_input_data)")
+    plt.title("Zoomed PSD of ax_b (whole input flight_sensor_input_data)")
     plt.xlim(0.2, 2.0)
     plt.ylim(0.1, 100.0)
     plt.savefig(f"{plot_directory}/zoomed-psd-plot-az.pdf")
@@ -345,10 +345,10 @@ def read_prepare_9_dof_shell(raw_data_file, plot_directory, sensor_cm_offset):
     # plt.scatter(time_t, ax_t, color="black", s=8, alpha=1.0, label="Raw Data")
     # plt.plot(time_t, ax_g, color="red", label="ax_b unfiltered")
     # plt.plot(time_t, ax_f, color="blue", linewidth=2, label="Butterworth (Zero Phase)")
-    # plt.title("Step 3: Filter & Unfilterd Comparison")
+    # plt.title("Step 3: Filter & Unfiltered Comparison")
     # plt.ylabel("m/s^2")
     # plt.legend()
-    # add_2d_plot_note("add comment about Butterworh filter", x=0.40)
+    # add_2d_plot_note("add comment about Butterworth filter", x=0.40)
     # plt.savefig(f"{plot_directory}/butterworth-orig-plot.pdf")
     # plt.show()
     #

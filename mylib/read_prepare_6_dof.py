@@ -17,7 +17,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     Parameters:
     -----------
     filename : str
-        Path to the 'launch_data.txt' containing [time, ax, ay, az, gr, gp, gy].
+        Path to the 'launch_data_file-6dof_nov2022_carlos.txt' containing [time, ax, ay, az, gr, gp, gy].
 
 
     Returns:
@@ -95,7 +95,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     print(f"\tDetected Chute Deploy: {t_land:.2f}s")
     print(f"\tFlight Duration: {t_land - t_launch:.2f}s")
 
-    # --- E.  Truncate raw_input_data for flight window add buffer
+    # --- E.  Truncate flight_sensor_input_data for flight window add buffer
     buffer = 1.0
     time_t = prep.truncate(time_raw, time_raw, t_launch - buffer, t_land + buffer)
     ax_t, ay_t, az_t = [prep.truncate(v, time_raw, t_launch - buffer, t_land + buffer) for v in [ax_b, ay_b, az_b]]
@@ -117,39 +117,39 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
 
     # --- F. Analyze PSD Power Spectral Density - Is filtering needed?
     ax_freq, ax_psd = psd.get_psd(ax_b, fs=sample_frequency, nperseg=1024)
-    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
 
     plt.figure(figsize=(8, 4))
     plt.loglog(ax_freq[1:], ax_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of Ax_b (whole input raw_input_data)")
+    plt.title("PSD of Ax_b (whole input flight_sensor_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot-ax.pdf")
     plt.show()
 
     ay_freq, ay_psd = psd.get_psd(ay_b, fs=sample_frequency, nperseg=1024)
-    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
 
     plt.figure(figsize=(8, 4))
     plt.loglog(ay_freq[1:], ay_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of Ay_b (whole input raw_input_data)")
+    plt.title("PSD of Ay_b (whole input flight_sensor_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot-ay.pdf")
     plt.show()
 
     az_freq, az_psd = psd.get_psd(az_b, fs=sample_frequency, nperseg=1024)
-    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input raw_input_data)")
+    # plot_psd(ax_freq, ax_psd, title="PSD of Ax_b (whole input flight_sensor_input_data)")
 
     plt.figure(figsize=(8, 4))
     plt.loglog(az_freq[1:], az_psd[1:])  # skip DC bin
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("PSD (m²/s⁴/Hz)")
-    plt.title("PSD of Az_b (whole input raw_input_data)")
+    plt.title("PSD of Az_b (whole input flight_sensor_input_data)")
     plt.grid(True, which="both")
     plt.tight_layout()
     plt.savefig(f"{plot_directory}/full-psd-plot-az.pdf")
@@ -161,7 +161,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     plt.ylabel("PSD (m²/s⁴/Hz)")
     plt.grid(True, which="both")
     plt.tight_layout()
-    plt.title("Zoomed PSD of Ax_b (whole input raw_input_data)")
+    plt.title("Zoomed PSD of Ax_b (whole input flight_sensor_input_data)")
     plt.xlim(0.2, 2.0)
     plt.ylim(0.1, 100.0)
     plt.savefig(f"{plot_directory}/zoomed-psd-plot-ax-zoom.pdf")
@@ -242,7 +242,7 @@ def read_prepare_6_dof(raw_data_file, plot_directory):
     plt.title("Step 4: post-flight Attempt at Static Bias Correction- Center Gravity & Bias Correction")
     plt.legend()
     plt.grid(True)
-    add_2d_plot_note("orig IMU raw_input_data should zero bias, launch at 874.64", x=0.35)
+    add_2d_plot_note("orig IMU flight_sensor_input_data should zero bias, launch at 874.64", x=0.35)
     plt.savefig(f"{plot_directory}/imu-bias-plot.pdf")
     plt.show()
 
