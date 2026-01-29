@@ -1,4 +1,5 @@
 # read_prepare_9_dof.py
+# TODO add column for hPa data, adjust rows per sector parameters
 
 """
 Linear_acceleration, Quaternion, Gyro logging from BNO086 sensor to flash memory.
@@ -11,30 +12,29 @@ After calibration, the bno.linear_acceleration and bno.gyro are measured while n
 a bias correction. The values collected are shown in an ascii histogram. Then the median is used
 as the bias correction that is applied to dall data.
 
-There are two methods included for storing the data to flash:
-    1. OPTION 1: Buffer all data in memory before writing to Flash - limited to 95 KiB logs
-        write_results_whole_batch(bno, rows, filename)
-    The max size of 95 KiB is a serious limitation due to typical sensor result volumes.
-    This method is included for TESTING-ONLY, as it is low-jitter
-
-    2. OPTION 2: Buffer 4 KiB Sector, then sector to flash. This will show jitter at sector writes.
+Beause of the harsh enviroment which make disable the sensor. This code buffers data in memory and then
+writes it to flash. To be efficent for the flash it Buffers in 4 KiB Sector-size, then writes the
+sector to flash. This will show jitter at sector writes.
         write_results_by_sector(bno, rows, filename)
-    The max size of storage is limited only by the free space on flash. It gathers sensor result <- 4KiB.
-    The 4 KiB limit is due to the Flash's Sector size of 4 KiB. Writing this size is the most efficient.
-    With 5ms sample rate, the flash write and intermittant flush (duty cycle settable in code) will cause
-    50 ms to 110 ms jitter in sample collection.
 
-The BNO086 sensor is connect to Raspberry Pi Pico 2 W by SPI.
+The max size of storage is limited only by the free space on flash. It gathers sensor result <- 4KiB.
+The 4 KiB limit is due to the Flash's Sector size of 4 KiB. Writing this size is the most efficient.
+With 5ms sample rate, the flash write and intermittant flush (duty cycle settable in code) will cause
+50 ms to 110 ms jitter in sample collection. Also at 5ms (200Hz) a sector-size is about 0.5sec of data.
+
+The BNO086 sensor is connected to Raspberry Pi Pico 2 W by SPI.
 
 Input:
     *** CAUTION: TIME IN msec NOT SECONDS, for BNO086 efficiency at 5ms 200Hz
     ax, ay, az, acc, ts_ms = bno.linear_acceleration.full
     qr, qi, qj, qk = bno.quaternion
     gy, gp, gr = bno.gyro
+    TODO
+    hpa - 99.9  # replace with sensor reading in later version
 
 Output:
     *** CAUTION: The created CSV IS CONVERTED TO SECONDS by unpack_bin_sensor_logs.py
-    Seconds, lin_acc_x, lin_acc_y, lin_acc_z, quat_r, quat_i, quat_j, quat_k, gyro_y, gyro_p gyro_r
+    Seconds, lin_acc_x, lin_acc_y, lin_acc_z, quat_r, quat_i, quat_j, quat_k, gyro_y, gyro_p, gyro_r, hpa
 
 # Reading Linear_Acc for 1000 rows, doing nothing with output
 # sensor timestamps last_sensor_ms=5724.8 first_sensor_ms=644.9  sensor duration: 5.1 s
@@ -56,6 +56,17 @@ Output:
 # Clock msec/reports  = 6.29 ms
 # BYTES_PER_ROW=44, data size = 44000 bytes
 # Array = 43.0 KiB, xfer = 6.8 KiB/s
+
+Previous Version:
+    The previous version of this code log_linacc_quat_gyro_flash_spi.py also had debug
+    option to buffer all data in memory.
+
+    The serious limitation is the amount of memory on the Pico's heap.  That option is removed
+    from this code.
+    OPTION 1: Buffer all data in memory before writing to Flash - limited to 95 KiB logs
+        write_results_whole_batch(bno, rows, filename)
+    The max size of 95 KiB is a serious limitation due to typical sensor result volumes.
+    This method is included for TESTING-ONLY, as it is low-jitter
 """
 
 import binascii  # For fast CRC32
@@ -69,14 +80,23 @@ from machine import SPI, Pin
 from spi import BNO08X_SPI
 from utime import sleep_ms, ticks_ms, sleep_us
 
-NUM_FLOATS = const(11)
-BYTES_PER_ROW = const(44)
-pack_string = "<" + (NUM_FLOATS * "f")  # number of f's match count
-
-# CAUTION: When change NUM_FLOATS, need to change these constants
-ROWS_PER_SECTOR = const(93)
-DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4092 = 44 * 93
 SECTOR_SIZE = const(4096)  # Exactly 4 KiB
+
+# 12-fp32 with hPa
+NUM_FLOATS = const(12)
+BYTES_PER_ROW = const(48)
+# 4096 (Total) - 4 (CRC) + 4080 (85 rows * 48 bytes) + 12 bytes of zero padding.
+ROWS_PER_SECTOR = const(85)
+DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4080 bytes
+
+# 11-fp32 without hPa
+# NUM_FLOATS = const(11)
+# BYTES_PER_ROW = const(44)
+# 4096 (Total) - 4 (CRC) + 4092 (93 rows * 44 bytes) + NO bytes of zero padding.
+# ROWS_PER_SECTOR = const(93)
+# DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4092 = 44 * 93
+
+pack_string = "<" + (NUM_FLOATS * "f")  # number of f's match count
 
 # GLOBALS for Bias Correction
 AX_BIAS = 0.0
@@ -85,100 +105,6 @@ AZ_BIAS = 0.0
 GY_BIAS = 0.0
 GP_BIAS = 0.0
 GR_BIAS = 0.0
-
-
-def write_results_whole_batch(bno, rows: int, filename: str):
-    """
-    Buffer all results in memory then write whole file to flash. The advantage is very little jitter
-    for high-frequency updates (5 ms) with little jitter.
-
-    Low jitter, but limited to only 95 KiB in-memory storage.
-    This function usefor for simple tests, typically use sector-format version.
-
-    :param bno:
-    :param rows:
-    :param filename:
-    :return:
-    """
-    print("\nStore in buffer, then write whole file")
-
-    # Create/Clear the file
-    with open(filename, "wb") as f:
-        pass
-
-    # create In-memory buffer, note fragmented heap may limit size
-    required_buffer_size = rows * BYTES_PER_ROW
-    free_heap_size = gc.mem_free()
-
-    # Conservative margin: fragmentation, stack, and other
-    SAFETY_MARGIN = 16 * 1024  # 16 KiB
-
-    if required_buffer_size > (free_heap_size - SAFETY_MARGIN):
-        raise MemoryError(
-            "Whole-batch buffer too large: "
-            f"need {required_buffer_size / 1024.0:.1f} KiB, have {(free_heap_size - SAFETY_MARGIN) / 1024.0:.1f} KiB free. "
-            f"Max rows={(free_heap_size - SAFETY_MARGIN) / BYTES_PER_ROW:.0f} "
-            "Use sector-based logging instead."
-        )
-    else:
-        percent_memory = (required_buffer_size / free_heap_size) * 100.0
-        print(f"Memory used for buffer: {percent_memory:.0f}%")
-
-    buffer = bytearray(required_buffer_size)
-
-    # localize globals for effiency
-    ax_offset, ay_offset, az_offset = AX_BIAS, AY_BIAS, AZ_BIAS
-    gy_offset, gp_offset, gr_offset = GY_BIAS, GP_BIAS, GR_BIAS
-
-    update = bno.update_sensors
-    pack_into = struct.pack_into
-    crc32 = binascii.crc32
-    lin_acc = bno.linear_acceleration
-    quat = bno.quaternion
-    gyro = bno.gyro
-
-    i = 0
-    start = ticks_ms()
-    while i < rows:
-        if not update():
-            continue
-
-        if bno.linear_acceleration.updated:
-            ax, ay, az, acc, ts_ms = lin_acc.full
-            qr, qi, qj, qk = quat
-            gy, gp, gr = gyro
-
-            if i == 0:
-                first_sensor_ms = ts_ms
-
-            offset = i * BYTES_PER_ROW
-            pack_into(pack_string, buffer, offset,
-                      ts_ms,
-                      ax - ax_offset, ay - ay_offset, az - az_offset,
-                      qr, qi, qj, qk,
-                      gy - gy_offset, gp - gp_offset, gr - gr_offset, )
-
-            i += 1
-
-    last_sensor_ms = ts_ms
-    pico_ms = ticks_diff(ticks_ms(), start)
-
-    print(f"\nPrinting each Linear_Acc for {rows} rows:")
-    print(
-        f"sensor timestamps {last_sensor_ms=} {first_sensor_ms=}  sensor duration: {(last_sensor_ms - first_sensor_ms) / 1000:.1f} s")
-    print(f"Sensor msec/reports = {(last_sensor_ms - first_sensor_ms) / rows:.2f} ms")
-
-    print(f"Clock msec/reports  = {(pico_ms / rows):.2f} ms")
-
-    write_start = ticks_ms()
-    with open(filename, "ab") as f:
-        f.write(buffer)  # Write whole buffer 44,000 bytes
-        f.flush()
-        os.sync()
-
-    kbytes = len(buffer) / 1024.0
-    secs = ticks_diff(ticks_ms(), write_start) / 1000.0
-    print(f"Time to write {kbytes} KiB, time = {secs} s, xfer = {(kbytes / secs):.1f} KiB/s")
 
 
 def write_results_by_sector(bno, rows: int, filename: str):
@@ -207,7 +133,7 @@ def write_results_by_sector(bno, rows: int, filename: str):
     # Buffer of exactly 4 KiB, data: 4092 CRC: last 4 bytes
     sector_buffer = bytearray(SECTOR_SIZE)
 
-    # localize globals for effiency
+    # localize globals for efficiency
     ax_offset, ay_offset, az_offset = AX_BIAS, AY_BIAS, AZ_BIAS
     gy_offset, gp_offset, gr_offset = GY_BIAS, GP_BIAS, GR_BIAS
 
@@ -234,6 +160,7 @@ def write_results_by_sector(bno, rows: int, filename: str):
                     ax, ay, az, acc, ts_ms = lin_acc.full
                     qr, qi, qj, qk = quat
                     gy, gp, gr = gyro
+                    hpa = 99.9  # TODO Placeholder for future sensor reading
 
                     if i == 0:
                         first_sensor_ms = ts_ms
@@ -244,7 +171,8 @@ def write_results_by_sector(bno, rows: int, filename: str):
                               ts_ms,
                               ax - ax_offset, ay - ay_offset, az - az_offset,
                               qr, qi, qj, qk,
-                              gy - gy_offset, gp - gp_offset, gr - gr_offset, )
+                              gy - gy_offset, gp - gp_offset, gr - gr_offset,
+                              hpa)
 
                     sector_row_count += 1
                     i += 1
@@ -254,7 +182,8 @@ def write_results_by_sector(bno, rows: int, filename: str):
                 start_fill = sector_row_count * BYTES_PER_ROW
                 sector_buffer[start_fill:DATA_SIZE] = b"\x00" * (DATA_SIZE - start_fill)
 
-            # Calculate CRC32 on the data (first 4092 bytes), Pack the CRC  32bit "I" into the last 4 sector bytes
+            # 12-fp32 :Calculate CRC32 on the data (first 4080 bytes), Pack the CRC  32bit "I" into location 4080
+            # OLD 11-fp32 :Calculate CRC32 on the data (first 4092 bytes), Pack the CRC  32bit "I" into the last 4 sector bytes
             # adds .08 ms to loop  6.18 ms with flush, 6.26 with flush & CRC
             crc = crc32(memoryview(sector_buffer)[:DATA_SIZE])
             struct.pack_into("<I", sector_buffer, DATA_SIZE, crc)
@@ -313,7 +242,7 @@ def ascii_histogram(data, bins=15, max_width=40):
     for val in data:
         # Calculate which bin the value belongs to
         idx = int((val - d_min) / bin_width)
-        if idx == bins: # Handle maximum value
+        if idx == bins:  # Handle maximum value
             idx -= 1
         counts[idx] += 1
 
@@ -333,6 +262,7 @@ def ascii_histogram(data, bins=15, max_width=40):
 
         # Print row: Range | Count | Bar
         print(f"{b_start:10.6f} to {b_end:10.6f} | {counts[i]:5d} | {bar}")
+
 
 def get_median(data):
     """Simple median for array.array or list"""
@@ -492,11 +422,16 @@ def get_static_bias(bno, samples=100):
     gp = array('f', [0.0] * samples)
     gr = array('f', [0.0] * samples)
 
+    for i in range(20):
+        bno.update_sensors()
+        if bno.linear_acceleration.updated:
+            new_ax, new_ay, new_az = bno.linear_acceleration
+            new_gy, new_gp, new_gr = bno.gyro
+
     idx = 0
     while idx < samples:
         bno.update_sensors()
         if bno.linear_acceleration.updated:
-
             new_ax, new_ay, new_az = bno.linear_acceleration
             new_gy, new_gp, new_gr = bno.gyro
 
@@ -604,7 +539,7 @@ def main():
     print("====================================\n")
 
     # Update frequency in Hz, 200Hz = 5ms sample
-    # very slow for oriention testing: 10Hz = 100ms
+    # very slow for orientation testing: 10Hz = 100ms
     update_frequency = 200
     bno.linear_acceleration.enable(update_frequency)
     bno.gyro.enable(update_frequency)
@@ -622,25 +557,27 @@ def main():
 
     # Calculate Sensor Bias DO Not move sensor
     print("\nStarting Bias calibration...")
-    get_static_bias(bno, samples=10 * update_frequency)
+    # 1 second or 200 samples at 200 Hz
+    get_static_bias(bno, samples=1 * update_frequency)
     print(f"\nStatic Acceleration Biases: {AX_BIAS=:+.6f}, {AY_BIAS=:+.6f}, {AZ_BIAS=:+.6f}")
     print(f"Static Gyro Biases:         {GY_BIAS=:+.6f}, {GP_BIAS=:+.6f}, {GR_BIAS=:+.6f}")
 
+    # GC after calibration & Bias calculation
+    print(f"\nFree memory before gc.collect: {gc.mem_free()} bytes")
+    gc.collect()
+    print(f"Free memory after  gc.collect: {gc.mem_free()} bytes")
+
     # Log results
 
-    # 5ms sample period generate 200 rows/sec
-    duration_seconds = 20
+    # 5 ms sample period generate 200 rows/sec, sector-size samples is 80-90 which gives 0.5 sec of samples
+    duration_seconds = 5
     rows = duration_seconds * update_frequency
-    print(f"\nSensor Collection: {duration_seconds=}, {rows=}, {update_frequency=}Hz,")
+    print(f"\nSensor Collection started: {duration_seconds=}, {rows=}, {update_frequency=}Hz,")
 
-    # --- TWO WRITE-TO-FLASH Options - TODO CHOOSE ONE
+    # WRITE-TO-FLASH in sectors
 
-    # OPTION 1: Buffer all data in memory before writing to Flash - limited to 95 KiB logs
-    filename = "flight_log_2026xxxx_xpm_whole.bin"
-    write_results_whole_batch(bno, rows, filename)
-
-    # OPTION 2: Buffer 4 KiB Sector, then sector to flash. This will show jitter at sector writes.
-    filename = "flight_log_2026xxxx_xpm_sector.bin"
+    # Buffer 4 KiB Sector, then write sector to flash. This will show jitter at sector writes.
+    filename = "flight_log_debug_sector.bin"
     write_results_by_sector(bno, rows, filename)
 
 

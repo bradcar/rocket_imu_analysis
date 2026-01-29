@@ -32,40 +32,42 @@ Sample timings:
 Sector-formatted data has delays caused by sector writes & flushes
 
 Decoded 1000 rows, FILE OK, No Corrupt blocks: 0)
-	Header: ['ts_ms', 'ax', 'ay', 'az', 'qr', 'qi', 'qj', 'qk', 'gy', 'gp', 'gr']
-	Data: [6274.5000, 0.0195, -0.0156, 0.0117, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
-	Data: [6295.7002, 0.0195, -0.0156, 0.0117, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
-	Data: [6301.0000, -0.0273, 0.0000, -0.0078, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
-	Data: [6306.7998, 0.0000, -0.0117, 0.0195, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
-	Data: [6311.0000, 0.0312, 0.0039, 0.0273, 0.9928, 0.0104, -0.0200, 0.1179, 0.0000, 0.0000, 0.0000]
+	Header: ['ts_ms', 'ax', 'ay', 'az', 'qr', 'qi', 'qj', 'qk', 'gy', 'gp', 'gr', 'hpa']
+	Data: [17170.0000, 0.0195, 0.0391, -0.0195, 0.6223, -0.0134, -0.0254, -0.7822, 0.0000, 0.0000, 0.0000, 99.9000]
+	Data: [17185.1992, 0.0195, 0.0391, -0.0195, 0.6223, -0.0134, -0.0254, -0.7822, 0.0000, 0.0000, 0.0000, 99.9000]
+	Data: [17190.0000, -0.0273, 0.0000, 0.0039, 0.6223, -0.0134, -0.0253, -0.7822, -0.0039, 0.0098, 0.0000, 99.9000]
+	Data: [17195.1992, -0.0156, -0.0117, 0.0195, 0.6223, -0.0134, -0.0253, -0.7822, -0.0020, 0.0020, -0.0078, 99.9000]
+	Data: [17200.0000, 0.0078, -0.0156, 0.0000, 0.6223, -0.0134, -0.0253, -0.7823, -0.0020, 0.0020, 0.0000, 99.9000]
 
-Average Data Freq: 164.63 Hz
-	Average time step: 6.07 ms
-	Min/Max interval: 1.50 / 105.50 ms
-	Std Dev: 8.62 ms, jitter: 141.9%
+Average Data Freq: 164.26 Hz
+	Average time step: 6.09 ms
+	Min/Max interval: 1.10 / 104.00 ms
+	Std Dev: 8.31 ms, jitter: 136.5%
 
 Histogram of report periods (ms):
- 0.0– 1.0 (    0) |
- 1.0– 2.0 (    4) | #
- 2.0– 3.0 (   10) | #
- 3.0– 4.0 (   41) | ####
- 4.0– 5.0 (  385) | ##########################################
- 5.0– 6.0 (  457) | ##################################################
- 6.0– 7.0 (   58) | ######
- 7.0– 8.0 (    6) | #
- 8.0– 9.0 (    7) | #
- 9.0–10.0 (    2) | #
-10.0–11.0 (    4) | #
-11.0–12.0 (    2) | #
-12.0–13.0 (    0) |
-13.0–14.0 (    0) |
-14.0–15.0 (    0) |
-15.0–16.0 (    0) |
-16.0–17.0 (    1) | #
-17.0–18.0 (    0) |
-18.0–19.0 (    0) |
-19.0–20.0 (    0) |
-    >20.0 (   22) | ##
+  0.0–  1.0 (    0) |
+  1.0–  2.0 (    4) | #
+  2.0–  3.0 (    2) | #
+  3.0–  4.0 (   43) | ####
+  4.0–  5.0 (  350) | ###################################
+  5.0–  6.0 (  496) | ##################################################
+  6.0–  7.0 (   61) | ######
+  7.0–  8.0 (    4) | #
+  8.0–  9.0 (    4) | #
+  9.0– 10.0 (    1) | #
+ 10.0– 11.0 (    4) | #
+ 11.0– 12.0 (    5) | #
+ 12.0– 13.0 (    0) |
+ 13.0– 14.0 (    0) |
+ 14.0– 15.0 (    0) |
+ 15.0– 16.0 (    1) | #
+ 16.0– 17.0 (    1) | #
+ 17.0– 18.0 (    1) | #
+ 18.0– 19.0 (    0) |
+ 19.0– 20.0 (    1) | #
+ 20.0– 21.0 (    2) | #
+     >21.0 (   19) | ##
+
 """
 import binascii
 import os
@@ -74,11 +76,21 @@ import struct
 import numpy as np
 
 # Constants matching Pico code: log_linacc_quat_gyro_flash.py
-NUM_FLOATS = 11
-BYTES_PER_ROW = 44
-ROWS_PER_SECTOR = 93
-DATA_PART_SIZE = 4092  # 93 rows * 44 bytes
-SECTOR_SIZE = 4096  # 4KiB
+SECTOR_SIZE = 4096  # Exactly 4 KiB
+
+# 12-fp32 with hPa
+NUM_FLOATS = 12
+BYTES_PER_ROW = 48
+# 4096 (Total) - 4 (CRC) + 4080 (85 rows * 48 bytes) + 12 bytes of zero padding.
+ROWS_PER_SECTOR = 85
+DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4080 bytes
+
+# 11-fp32 without hPa
+# NUM_FLOATS = 11
+# BYTES_PER_ROW = 44
+# 4096 (Total) - 4 (CRC) + 4092 (93 rows * 44 bytes) + NO bytes of zero padding.
+# ROWS_PER_SECTOR = 93
+# DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4092 = 44 * 93
 
 ROW_DTYPE = np.dtype("<f4", NUM_FLOATS)
 
@@ -115,8 +127,9 @@ def decode_sector_buffer(filename):
                 print(f"Warning: Final sector is incomplete ({len(sector)} bytes). Skipping sector.")
                 break
 
-            data_part = sector[:DATA_PART_SIZE]
-            stored_crc = struct.unpack("<I", sector[DATA_PART_SIZE:SECTOR_SIZE])[0]
+            # CRC is stored right after data, 12-float means at location 4080
+            data_part = sector[:DATA_SIZE]
+            stored_crc = struct.unpack("<I", sector[DATA_SIZE:DATA_SIZE + 4])[0]
             computed_crc = binascii.crc32(data_part) & 0xFFFFFFFF
 
             if stored_crc != computed_crc:
@@ -155,22 +168,18 @@ def ascii_histogram(data):
     """
 
     # 5ms samples
-    # define bins: 0.0–1.0, 1.0–2.0, ..., 9.0–10.0, >10.0
+    # define bins: 0.0–1.0, 1.0–2.0, ..., 9.0–20.0, >20.0
     bin_min = 0.0
     bin_max = 21.0
+    bin_width = 1.0
 
-    # 100ms samples
-    bin_min = 0.0
-    bin_max = 200.0
-    bin_width = 20.0
-
-    bins = np.arange(bin_min,  bin_max+bin_width, bin_width)
+    bins = np.arange(bin_min, bin_max + bin_width, bin_width)
     counts, _ = np.histogram(data, bins=bins)
 
     # overflow (>10.0)
     overflow = np.sum(data > bin_max)
 
-    # limit histogram lenth
+    # limit histogram length
     max_width = 50
     all_counts = np.append(counts, overflow)
     max_count = all_counts.max()
@@ -198,7 +207,7 @@ def print_summary(data):
         print("No data")
         return
 
-    h = ["ts_ms", "ax", "ay", "az", "qr", "qi", "qj", "qk", "gy", "gp", "gr"]
+    h = ["ts_ms", "ax", "ay", "az", "qr", "qi", "qj", "qk", "gy", "gp", "gr", "hpa"]
     print(f"\tHeader: {h}")
 
     for i in range(min(5, data.shape[0])):
@@ -229,7 +238,7 @@ def write_csv(filename, data, precision=7):
         print(f"No data to write: {filename}")
         return
 
-    header = ["SECONDS", "ax", "ay", "az", "qr", "qi", "qj", "qk", "gy", "gp", "gr", ]
+    header = ["SECONDS", "ax", "ay", "az", "qr", "qi", "qj", "qk", "gy", "gp", "gr", "hpa"]
     fmt = ["%.4f"] + [f"%.{precision}f"] * (data.shape[1] - 1)
 
     print("\n*** WARNING: CSV is converted to SECONDS, above processing in msec")
@@ -244,17 +253,9 @@ def write_csv(filename, data, precision=7):
 
 # Main #############################################
 def main():
-    # Convert Whole-Data-formatted file
-    filename = "data_logs/flight_log_2026xxxx_xpm_whole.bin"
-    if os.path.exists(filename):
-        whole_data = decode_whole_buffer(filename)
-        print_summary(whole_data)
-        write_csv(filename.replace(".bin", ".csv"), whole_data)
-    else:
-        print(f"\nFile {filename} does not exist")
-
     # Convert Sector-formatted file
-    filename = "data_logs/flight_log_2026xxxx_xpm_sector.bin"
+    filename = "imu_test_data_logs/flight_log_debug_sector.bin"
+
     if os.path.exists(filename):
         sector_data = decode_sector_buffer(filename)
         print_summary(sector_data)

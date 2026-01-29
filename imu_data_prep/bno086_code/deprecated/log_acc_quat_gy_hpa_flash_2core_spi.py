@@ -1,7 +1,8 @@
 # read_prepare_9_dof.py
+# TODO ! *DEPRECATED* ! - reverting to single-core log_linacc_quat_gyro_hpa_flash_spi.py unless
+#  Complexity of the code below has no advantage on removing jitter
 # TODO DEBUG: Dual-core didn't solve >100ms jitter during flash writes,  likely better to use serial code
 # TODO ADD hPa barometer processing
-
 """
 Linear_acceleration, Quaternion, Gyro logging from BNO086 sensor to flash memory.
 
