@@ -78,20 +78,13 @@ import numpy as np
 # Constants matching Pico code: log_linacc_quat_gyro_flash.py
 SECTOR_SIZE = 4096  # Exactly 4 KiB
 
-# 12-fp32 with hPa
+# 12-fp32 with hPa: 4096 (Total) = 4080 (85 rows * 48 bytes) + 12 bytes of data + 4 bytes CRC
 NUM_FLOATS = 12
 BYTES_PER_ROW = 48
-# 4096 (Total) - 4 (CRC) + 4080 (85 rows * 48 bytes) + 12 bytes of zero padding.
 ROWS_PER_SECTOR = 85
 DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4080 bytes
-
-# 11-fp32 without hPa
-# NUM_FLOATS = 11
-# BYTES_PER_ROW = 44
-# 4096 (Total) - 4 (CRC) + 4092 (93 rows * 44 bytes) + NO bytes of zero padding.
-# ROWS_PER_SECTOR = 93
-# DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4092 = 44 * 93
-
+CUSTOM_DATA_OFFSET = DATA_SIZE
+CRC_OFFSET = 4092
 ROW_DTYPE = np.dtype("<f4", NUM_FLOATS)
 
 
@@ -115,10 +108,12 @@ def decode_sector_buffer(filename):
     print(f"\n--- Decoding Sector Buffer File (CRC Verified): {filename}")
 
     rows = []
-    corrupt_blocks = 0
+    corrupt_sector = 0
+    max_celsius = -999.9
+    max_celsius_ts = 0.0
 
     with open(filename, "rb") as f:
-        block_idx = 0
+        sector_idx = 0
         while True:
             sector = f.read(SECTOR_SIZE)
             if not sector:
@@ -127,37 +122,46 @@ def decode_sector_buffer(filename):
                 print(f"Warning: Final sector is incomplete ({len(sector)} bytes). Skipping sector.")
                 break
 
-            # CRC is stored right after data, 12-float means at location 4080
-            data_part = sector[:DATA_SIZE]
-            stored_crc = struct.unpack("<I", sector[DATA_SIZE:DATA_SIZE + 4])[0]
-            computed_crc = binascii.crc32(data_part) & 0xFFFFFFFF
+            # CRC is stored at end
+            data_for_crc = sector[:CRC_OFFSET]
+            stored_crc = struct.unpack("<I", sector[CRC_OFFSET:CRC_OFFSET + 4])[0]
+            computed_crc = binascii.crc32(data_for_crc) & 0xFFFFFFFF
 
             if stored_crc != computed_crc:
-                print(f"Warning: CRC FAIL! at Block {block_idx}: ")
-                corrupt_blocks += 1
-                block_idx += 1
+                print(f"Warning: CRC FAIL! at Sector {sector_idx}: ")
+                corrupt_sector += 1
+                sector_idx += 1
                 continue
 
-            block = np.frombuffer(data_part, dtype=ROW_DTYPE).reshape(-1, NUM_FLOATS)
+            # Extract sector data
+            custom_data = sector[CUSTOM_DATA_OFFSET:CRC_OFFSET]
+            sector_max_celsius, sector_max_celsius_ts, val3 = struct.unpack("<fff", custom_data)
+
+            if sector_max_celsius > max_celsius:
+                max_celsius = sector_max_celsius
+                max_celsius_ts = sector_max_celsius_ts
+
+            sensor_data = sector[:DATA_SIZE]
+            block = np.frombuffer(sensor_data, dtype=ROW_DTYPE).reshape(-1, NUM_FLOATS)
 
             # Drop all zero rows signal of mid-sector termination, ts_ms will never be 0
             valid = np.any(block != 0.0, axis=1)
             block = block[valid]
 
             rows.append(block)
-            block_idx += 1
+            sector_idx += 1
 
     if rows:
         data = np.vstack(rows)
     else:
         data = np.empty((0, NUM_FLOATS), dtype=np.float32)
 
-    if corrupt_blocks == 0:
-        print(f"Decoded {data.shape[0]} rows, FILE OK, No Corrupt blocks: {corrupt_blocks})")
+    if corrupt_sector == 0:
+        print(f"Decoded {data.shape[0]} rows, FILE OK, No Corrupt sectors.")
     else:
-        print(f"Decoded {data.shape[0]} rows, {corrupt_blocks} Corrupt blocks")
+        print(f"Decoded {data.shape[0]} rows, {corrupt_sector} Corrupt sector")
 
-    return data
+    return data, max_celsius, max_celsius_ts
 
 
 def ascii_histogram(data):
@@ -198,7 +202,7 @@ def ascii_histogram(data):
         label = f"{left:5.1f}–{right:5.1f} ({count:5d})"
         print(f"{label} | {bar(count)}")
 
-    print(f"     >{bin_max} ({overflow:5d}) | {bar(overflow)}")
+    print(f"      >{bin_max} ({overflow:5d}) | {bar(overflow)}")
 
 
 def print_summary(data):
@@ -257,8 +261,13 @@ def main():
     filename = "imu_test_data_logs/flight_log_debug_sector.bin"
 
     if os.path.exists(filename):
-        sector_data = decode_sector_buffer(filename)
+        sector_data, max_celsius, max_celsius_ts = decode_sector_buffer(filename)
+
+        # print flight stats
         print_summary(sector_data)
+        print(f"\nFlight Max Celsius: {max_celsius:.2f}° C at {max_celsius_ts:.1f} ms")
+
+        # create csv
         write_csv(filename.replace(".bin", ".csv"), sector_data)
     else:
         print(f"\nError: File {filename} does not exist")

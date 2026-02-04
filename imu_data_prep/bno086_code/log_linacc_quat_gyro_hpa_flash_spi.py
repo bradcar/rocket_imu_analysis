@@ -59,14 +59,8 @@ Output:
 
 Previous Version:
     The previous version of this code log_linacc_quat_gyro_flash_spi.py also had debug
-    option to buffer all data in memory.
-
-    The serious limitation is the amount of memory on the Pico's heap.  That option is removed
-    from this code.
-    OPTION 1: Buffer all data in memory before writing to Flash - limited to 95 KiB logs
-        write_results_whole_batch(bno, rows, filename)
-    The max size of 95 KiB is a serious limitation due to typical sensor result volumes.
-    This method is included for TESTING-ONLY, as it is low-jitter
+    option to buffer all data in heap memory but it was limited to a max of 95 KiB logs.
+        write_results_whole_batch(bno, rows, sensor_file_name)
 """
 
 import binascii  # For fast CRC32
@@ -76,26 +70,25 @@ import struct
 
 from array import array
 from bno08x import *
-from machine import SPI, Pin
+from machine import SPI, I2C, Pin
+from micropython_bmpxxx import bmpxxx
 from spi import BNO08X_SPI
 from utime import sleep_ms, ticks_ms, sleep_us
 
-SECTOR_SIZE = const(4096)  # Exactly 4 KiB
+# Site Constants
+SITE_ELEVATION = 500
+SENSOR_FILE_NAME = "flight_log_debug_sector.bin"
+METADATA_FILE_NAME = "flight_metadata_debug_sector.bin"
 
-# 12-fp32 with hPa
+# CONSTANT for DataLog file: 12-fp32 with hPa
+SECTOR_SIZE = const(4096)  # Exactly 4 KiB
 NUM_FLOATS = const(12)
 BYTES_PER_ROW = const(48)
-# 4096 (Total) - 4 (CRC) + 4080 (85 rows * 48 bytes) + 12 bytes of zero padding.
+# 4096 (Total) - 4080 (85 rows * 48 bytes) + 12 bytes of data or zero padding +4 (CRC) 
 ROWS_PER_SECTOR = const(85)
-DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4080 bytes
-
-# 11-fp32 without hPa
-# NUM_FLOATS = const(11)
-# BYTES_PER_ROW = const(44)
-# 4096 (Total) - 4 (CRC) + 4092 (93 rows * 44 bytes) + NO bytes of zero padding.
-# ROWS_PER_SECTOR = const(93)
-# DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4092 = 44 * 93
-
+DATA_SIZE = BYTES_PER_ROW * ROWS_PER_SECTOR  # 4080 bytes = 85 * 48
+CUSTOM_DATA_OFFSET = DATA_SIZE
+CRC_OFFSET = const(4092)       # The very last 4 bytes
 pack_string = "<" + (NUM_FLOATS * "f")  # number of f's match count
 
 # GLOBALS for Bias Correction
@@ -107,7 +100,7 @@ GP_BIAS = 0.0
 GR_BIAS = 0.0
 
 
-def write_results_by_sector(bno, rows: int, filename: str):
+def write_results_by_sector(bno, bmp, rows: int, sensor_file_name: str):
     """
     Write results to file sector by sector. At high-frequency (5ms updates) For 11 floats on BNO086,
     this is about 1 second of data which minimizes loss when sensor in hostile environment.
@@ -124,10 +117,10 @@ def write_results_by_sector(bno, rows: int, filename: str):
     global AX_BIAS, AY_BIAS, AZ_BIAS, GY_BIAS, GP_BIAS, GR_BIAS
 
     # Time Packing data into a 4 KiB buffer & writing sectors for flash
-    print("\nWriting data to Flash in 4 KiB sector chunks to flash")
+    print("\nWriting data to Flash in 4 KiB sectors to flash")
 
     # Reset file in sector data format
-    with open(filename, "wb") as f:
+    with open(sensor_file_name, "wb") as f:
         pass
 
     # Buffer of exactly 4 KiB, data: 4092 CRC: last 4 bytes
@@ -147,11 +140,18 @@ def write_results_by_sector(bno, rows: int, filename: str):
     i = 0
     sector_count = 0
     start = ticks_ms()
-    with open(filename, "ab") as f:
+    _, _, _, min_accuracy, ts_ms = lin_acc.full
+    first_sensor_ms = ts_ms
+    with open(sensor_file_name, "ab") as f:
+        print(f"Sensor Data file: {sensor_file_name}")
+        
         while i < rows:
-
-            # Accumulate one sector of data ~ 96 rows
+            
+            # Write data in sector-sized batches
             sector_row_count = 0
+            max_celsius_during_sector = bmp.temperature
+            max_celsus_ts_ms = ts_ms
+            
             while sector_row_count < ROWS_PER_SECTOR and i < rows:
                 if not update():
                     continue
@@ -160,10 +160,14 @@ def write_results_by_sector(bno, rows: int, filename: str):
                     ax, ay, az, acc, ts_ms = lin_acc.full
                     qr, qi, qj, qk = quat
                     gy, gp, gr = gyro
-                    hpa = 99.9  # TODO Placeholder for future sensor reading
-
-                    if i == 0:
-                        first_sensor_ms = ts_ms
+                    hpa = bmp.pressure
+                    celsius = bmp.temperature
+                                        
+                    if celsius > max_celsius_during_sector:
+                        max_celsius_during_sector = celsius
+                        max_celsus_ts_ms = ts_ms
+                        
+                    min_accuracy = min(min_accuracy, acc)
 
                     # Pack ONLY into the sector buffer
                     offset = sector_row_count * BYTES_PER_ROW
@@ -181,12 +185,22 @@ def write_results_by_sector(bno, rows: int, filename: str):
             if sector_row_count < ROWS_PER_SECTOR:
                 start_fill = sector_row_count * BYTES_PER_ROW
                 sector_buffer[start_fill:DATA_SIZE] = b"\x00" * (DATA_SIZE - start_fill)
-
-            # 12-fp32 :Calculate CRC32 on the data (first 4080 bytes), Pack the CRC  32bit "I" into location 4080
-            # OLD 11-fp32 :Calculate CRC32 on the data (first 4092 bytes), Pack the CRC  32bit "I" into the last 4 sector bytes
-            # adds .08 ms to loop  6.18 ms with flush, 6.26 with flush & CRC
-            crc = crc32(memoryview(sector_buffer)[:DATA_SIZE])
-            struct.pack_into("<I", sector_buffer, DATA_SIZE, crc)
+            
+            val3 = 4.2 # future expansion could be float or I for status
+            # todo maybe bits for accurady and ? 
+            struct.pack_into("<fff", sector_buffer, CUSTOM_DATA_OFFSET, max_celsius_during_sector, max_celsus_ts_ms, val3)
+            
+            # Calculate CRC over everything EXCEPT the last 4 bytes (4092 bytes total)
+            crc = crc32(memoryview(sector_buffer)[:4092])
+            struct.pack_into("<I", sector_buffer, CRC_OFFSET, crc)
+            
+            # Print Sector metadata
+            print(f"\nSector {sector_count}: stats")
+            print(f"sector_row_count: {sector_row_count} of {ROWS_PER_SECTOR}")
+            print(f"Sector Max Celsius: {max_celsius_during_sector:.2f}° C at {max_celsus_ts_ms} ms")
+            print(f"Sector Min Accuracy (Lin_acc): {min_accuracy}")
+            print(f"val3 (future): {val3}")
+            print(f"CRC: {hex(crc)}")
 
             # Write sector to flash:  bytes 0-4091 are data, last 4 bytes are CRC or 0x00 padding
             # write_start = ticks_ms()
@@ -208,16 +222,16 @@ def write_results_by_sector(bno, rows: int, filename: str):
     last_sensor_ms = ts_ms
     pico_ms = ticks_diff(ticks_ms(), start)
 
-    print(f"Final flush and sync. Total rows: {i} Rows")
+    print(f"\nFinal flush and sync. Total rows: {i} Rows")
     print(
         f"Sensor timestamps {last_sensor_ms=} {first_sensor_ms=}  sensor duration: {(last_sensor_ms - first_sensor_ms) / 1000:.1f} s")
     print(f"Sensor msec/reports = {(last_sensor_ms - first_sensor_ms) / rows:.2f} ms")
 
     print(f"Clock msec/reports  = {(pico_ms / rows):.2f} ms")
 
-    print(f"{BYTES_PER_ROW=}, data size = {(rows * BYTES_PER_ROW)} bytes")
     kbytes = (BYTES_PER_ROW * rows) / 1024
-    print(f"Array = {kbytes:.1f} KiB, xfer = {kbytes / (pico_ms / 1000.0):.1f} KiB/s")
+    print(f"{BYTES_PER_ROW=}, data size = {(rows * BYTES_PER_ROW)} ({kbytes:.1f} KiB)")
+    print(f"xfer = {kbytes / (pico_ms / 1000.0):.1f} KiB/s")
 
 
 def ascii_histogram(data, bins=15, max_width=40):
@@ -531,12 +545,26 @@ def main():
     # mosi=Pin(19) - BNO SI (PICO)
     wake_pin = Pin(20, Pin.OUT, value=1)  # BNO WAK
 
+    # SPI & I2C
     spi = SPI(0, baudrate=3000000, sck=Pin(18), mosi=Pin(19), miso=Pin(16))
-    bno = BNO08X_SPI(spi, cs_pin, reset_pin, int_pin, wake_pin, debug=False)
-
+    bno = BNO08X_SPI(spi, cs_pin, reset_pin, int_pin, wake_pin, debug=False) 
+    i2c = I2C(id=0, scl=Pin(13), sda=Pin(12), freq=400_000)   
+    bmp = bmpxxx.BMP585(i2c=i2c, address=0x47)
+    
     print(spi)  # baudrate=3000000 required
+    print(i2c)  # baudrate= 400000 required
     print("Start")
     print("====================================\n")
+    
+    # Set up Barometer
+    bmp.pressure_oversample_rate = bmp.OSR4
+    bmp.temperature_oversample_rate = bmp.OSR4
+    bmp.iir_coefficient = bmp.COEF_1
+    
+    # Set known altitude in meters and the sea level pressure (SLP) will be calculated
+    bmp.altitude = SITE_ELEVATION
+    print(f"Altitude = {bmp.altitude:.2f} meters")
+    print(f"Adjusted SLP based on known altitude = {bmp.sea_level_pressure:.2f} hPa\n")
 
     # Update frequency in Hz, 200Hz = 5ms sample
     # very slow for orientation testing: 10Hz = 100ms
@@ -569,16 +597,15 @@ def main():
 
     # Log results
 
-    # 5 ms sample period generate 200 rows/sec, sector-size samples is 80-90 which gives 0.5 sec of samples
+    # 5 ms sample period generates 200 rows/sec (~85 rows) which is 0.5 sec per sector
     duration_seconds = 5
     rows = duration_seconds * update_frequency
-    print(f"\nSensor Collection started: {duration_seconds=}, {rows=}, {update_frequency=}Hz,")
+    print(f"\nSensor Collection started: {duration_seconds=}, {rows=}, {update_frequency=} Hz,")
 
-    # WRITE-TO-FLASH in sectors
-
-    # Buffer 4 KiB Sector, then write sector to flash. This will show jitter at sector writes.
-    filename = "flight_log_debug_sector.bin"
-    write_results_by_sector(bno, rows, filename)
+    # WRITE-TO-FLASH in 4 KiB sectors, unfortunately 100ms jitter at writes
+    write_results_by_sector(bno, bmp, rows, SENSOR_FILE_NAME)
+    
+    # write_metadata
 
 
 if __name__ == "__main__":
