@@ -1,0 +1,26 @@
+B-Line SARA, Lake Havasu
+34.444574,-114.250271
+
+Elevation
+984’ = 299.923 m
+
+City Airport:
+=========
+https://www.weather.gov/wrh/timeseries?site=KHII
+Elev: 807.0 ft; Lat/Lon: 34.56595/-114.35224
+
+Nearest airport: Kingman Airport (70 miles away), KIGM
+https://www.weather.gov/wrh/timeseries?site=KIGM
+Elev: 3445.0 ft; Lat/Lon: 35.25778/-113.93306
+
+
+——
+
+Home, PDX
+45.49720,-122.74612
+
+Elevation
+344’ =104.851 m 
+
+https://www.weather.gov/wrh/timeseries?site=Kpdx
+Elev: 20.0 ft; Lat/Lon: 45.59578/-122.60917
