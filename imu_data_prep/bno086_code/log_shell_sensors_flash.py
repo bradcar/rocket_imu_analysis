@@ -72,10 +72,20 @@ from micropython_bmpxxx import bmpxxx
 from spi import BNO08X_SPI
 from utime import sleep_ms, sleep_us, ticks_ms, ticks_us, ticks_add
 
+# File
+SENSOR_FILE_NAME = "flight_log_debug_sector_4.bin"
+
 # Site Constants
-SITE_ELEVATION = 500
-SENSOR_FILE_NAME = "flight_log_debug_sector.bin"
-METADATA_FILE_NAME = "flight_metadata_debug_sector.bin"
+PDX_HOME = 104.851       # peakfinder: 45.49720,-122.74612
+SARA_B_LINE_WPA_AZ = 299.923 # peakfinder: 34.444574,-114.250271
+SITE_ELEVATION = SARA_B_LINE_WPA_AZ
+# https://www.weather.gov/wrh/timeseries?site=KHII
+# Elev: 807.0 ft; Lat/Lon: 34.56595/-114.35224
+# 
+# Nearest airport: Kingman Airport (70 miles away), KIGM
+# https://www.weather.gov/wrh/timeseries?site=KIGM
+# Elev: 3445.0 ft; Lat/Lon: 35.25778/-113.93306
+
 
 # DataLog file:# 4096 = 4032 (84 rows * 48 bytes) + 24 bytes of data + 36 null + 4 (CRC)
 SECTOR_SIZE = const(4096)  # Exactly 4 KiB
@@ -114,12 +124,14 @@ top_flame_trigger_us = 0
 def handle_lift_interrupt(pin):
     global lift_trigger_us
     lift_trigger_us = ticks_us()
+    # print(f"Lift interrupt: {lift_trigger_us=}")
     pin.irq(handler=None)
 
 
 def handle_top_flame(pin):
     global top_flame_trigger_us
     top_flame_trigger_us = ticks_us()
+    # print(f"Top flame interrupt: {top_flame_trigger_us=}")
     pin.irq(handler=None)
 
 
@@ -584,8 +596,8 @@ def main():
     wake_pin = Pin(20, Pin.OUT, value=1)  # BNO WAK
 
     # Configure pins with Pull-Up resistors so they stay High until grounded
-    pin_lift_trig = Pin(21, Pin.IN)
-    pin_top_flame = Pin(22, Pin.IN)
+    pin_lift_trig = Pin(22, Pin.IN)
+    pin_top_flame = Pin(21, Pin.IN)
 
     # Attach interrupts for FALLING edge (High to Low)
     pin_lift_trig.irq(trigger=Pin.IRQ_FALLING, handler=handle_lift_interrupt)
@@ -643,6 +655,7 @@ def main():
     # 5 ms sample period generates 200 rows/sec (~85 rows) which is 0.5 sec per sector
     duration_seconds = 5
     rows = duration_seconds * update_frequency
+    rows = 600_000
     print(f"\nSensor Collection started: {duration_seconds=}, {rows=}, {update_frequency=} Hz,")
 
     # WRITE-TO-FLASH in 4 KiB sectors, unfortunately 100ms jitter at writes
